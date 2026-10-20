@@ -108,6 +108,15 @@ final class AppSettings: ObservableObject {
         !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    func hasAPIKey(for provider: AIProvider) -> Bool {
+        switch provider {
+        case .openCode:
+            return !openCodeAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .openRouter:
+            return !openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
     var defaultModel: AIModel {
         AIModel.model(for: defaultModelID)
     }

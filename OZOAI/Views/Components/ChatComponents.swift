@@ -66,10 +66,18 @@ struct HeaderIconButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 14.5, weight: .semibold))
                 .foregroundStyle(isEnabled ? Color.primary : Color.secondary.opacity(0.4))
                 .frame(width: 36, height: 36)
-                .background(Circle().fill(Color.primary.opacity(isEnabled ? 0.06 : 0.025)))
+                .background(
+                    Circle()
+                        .fill(Color.primary.opacity(isEnabled ? 0.055 : 0.025))
+                )
+                .overlay(
+                    Circle()
+                        .strokeBorder(OZOTheme.hairline, lineWidth: 0.7)
+                )
+                .contentShape(Circle())
         }
         .buttonStyle(OZOPressStyle())
         .disabled(!isEnabled)

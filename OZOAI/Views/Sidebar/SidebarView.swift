@@ -31,6 +31,7 @@ struct SidebarView: View {
             Button("Save") {
                 if let target = renameTarget {
                     store.rename(target, to: renameText)
+                    Haptics.success(settings.hapticsEnabled)
                 }
                 renameTarget = nil
             }
@@ -43,6 +44,7 @@ struct SidebarView: View {
             Button("Delete", role: .destructive) {
                 if let target = deleteTarget {
                     store.delete(target)
+                    Haptics.success(settings.hapticsEnabled)
                 }
                 deleteTarget = nil
             }
@@ -55,8 +57,24 @@ struct SidebarView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack {
-            OZOWordmark(compact: true)
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 3) {
+                OZOWordmark(compact: true)
+
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(settings.hasAPIKey ? OZOTheme.positive : OZOTheme.warning)
+                        .frame(width: 4.5, height: 4.5)
+
+                    Text(settings.hasAPIKey
+                         ? "\(settings.provider.shortName) · \(store.conversations.count) chats"
+                         : "Add your API key")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .padding(.leading, 2)
+            }
 
             Spacer()
 
@@ -65,17 +83,18 @@ struct SidebarView: View {
                 onClose()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: 32, height: 32)
-                    .background(Circle().fill(Color.primary.opacity(0.06)))
+                    .background(Circle().fill(Color.primary.opacity(0.055)))
+                    .overlay(Circle().strokeBorder(OZOTheme.hairline, lineWidth: 0.7))
             }
             .buttonStyle(OZOPressStyle())
             .accessibilityLabel("Close chats")
         }
         .padding(.top, topInset + 10)
         .padding(.horizontal, 16)
-        .padding(.bottom, 14)
+        .padding(.bottom, 13)
     }
 
     // MARK: - New chat + search
@@ -89,24 +108,29 @@ struct SidebarView: View {
             HStack(spacing: 9) {
                 Image(systemName: "square.and.pencil")
                     .font(.system(size: 14, weight: .semibold))
+
                 Text("New chat")
                     .font(.system(size: 14, weight: .semibold))
+
                 Spacer()
+
                 Image(systemName: "plus")
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.white.opacity(0.78))
             }
-            .foregroundStyle(.primary)
+            .foregroundStyle(.white)
             .padding(.horizontal, 13)
             .padding(.vertical, 11)
             .background(
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .fill(Color.primary.opacity(0.055))
+                OZOTheme.brandGradient,
+                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .strokeBorder(OZOTheme.hairline, lineWidth: 0.8)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(.white.opacity(0.13), lineWidth: 0.7)
             )
+            .shadow(color: OZOTheme.accent.opacity(0.22), radius: 12, y: 5)
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(OZOPressStyle())
         .padding(.horizontal, 12)
@@ -116,11 +140,11 @@ struct SidebarView: View {
     private var searchField: some View {
         HStack(spacing: 7) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 12.5, weight: .medium))
                 .foregroundStyle(.tertiary)
 
             TextField("Search chats", text: $searchText)
-                .font(.system(size: 13.5))
+                .font(.system(size: 13))
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.search)
@@ -138,10 +162,10 @@ struct SidebarView: View {
             }
         }
         .padding(.horizontal, 11)
-        .padding(.vertical, 9)
+        .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(Color.primary.opacity(0.04))
+                .fill(Color.primary.opacity(0.038))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 11, style: .continuous)
@@ -161,13 +185,24 @@ struct SidebarView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
                     ForEach(groups) { group in
-                        Text(group.title.uppercased())
-                            .font(.system(size: 9.5, weight: .bold, design: .rounded))
-                            .tracking(0.9)
-                            .foregroundStyle(.tertiary)
-                            .padding(.horizontal, 10)
-                            .padding(.top, 14)
-                            .padding(.bottom, 5)
+                        HStack(spacing: 5) {
+                            Text(group.title.uppercased())
+                                .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                                .tracking(0.9)
+                                .foregroundStyle(.tertiary)
+
+                            Text("\(group.conversations.count)")
+                                .font(.system(size: 8.5, weight: .bold, design: .rounded))
+                                .foregroundStyle(.quaternary)
+                                .padding(.horizontal, 4.5)
+                                .padding(.vertical, 1.5)
+                                .background(Color.primary.opacity(0.04), in: Capsule())
+
+                            Spacer()
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.top, 13)
+                        .padding(.bottom, 5)
 
                         ForEach(group.conversations) { conversation in
                             conversationRow(conversation)
@@ -178,6 +213,7 @@ struct SidebarView: View {
                 .padding(.bottom, 16)
             }
             .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.interactively)
         }
     }
 
@@ -185,7 +221,7 @@ struct SidebarView: View {
         let isSelected = conversation.id == store.currentID
         let model = AIModel.model(for: conversation.modelID)
 
-        return HStack(spacing: 4) {
+        return HStack(spacing: 0) {
             Button {
                 Haptics.soft(settings.hapticsEnabled)
                 withAnimation(.easeOut(duration: 0.2)) {
@@ -194,14 +230,19 @@ struct SidebarView: View {
                 onClose()
             } label: {
                 HStack(alignment: .center, spacing: 9) {
-                    Image(systemName: isSelected ? "bubble.left.fill" : "bubble.left")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(isSelected ? OZOTheme.accent : Color.secondary)
-                        .frame(width: 20)
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill((isSelected ? OZOTheme.accent : model.tint).opacity(0.12))
+                            .frame(width: 30, height: 30)
+
+                        Image(systemName: model.symbol)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(isSelected ? OZOTheme.accent : model.tint)
+                    }
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(conversation.title)
-                            .font(.system(size: 13.5, weight: isSelected ? .semibold : .medium))
+                            .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
 
@@ -211,13 +252,15 @@ struct SidebarView: View {
                             Text("·")
                             Text(conversation.updatedAt.ozoRelativeLabel)
                         }
-                        .font(.system(size: 9.5, weight: .medium))
+                        .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(.tertiary)
                     }
 
                     Spacer(minLength: 2)
                 }
                 .contentShape(Rectangle())
+                .padding(.leading, 9)
+                .padding(.vertical, 7)
             }
             .buttonStyle(.plain)
 
@@ -238,19 +281,27 @@ struct SidebarView: View {
                 }
             } label: {
                 Image(systemName: "ellipsis")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(isSelected ? Color.secondary : Color.secondary.opacity(0.55))
-                    .frame(width: 26, height: 28)
+                    .frame(width: 27, height: 34)
                     .contentShape(Rectangle())
             }
+            .accessibilityLabel("Options for \(conversation.title)")
         }
-        .padding(.leading, 9)
-        .padding(.trailing, 6)
-        .padding(.vertical, 8)
+        .padding(.trailing, 4)
         .background(
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(isSelected ? OZOTheme.accent.opacity(0.10) : Color.clear)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(isSelected ? OZOTheme.accent.opacity(0.095) : Color.clear)
         )
+        .overlay(alignment: .leading) {
+            if isSelected {
+                Capsule()
+                    .fill(OZOTheme.accent)
+                    .frame(width: 3, height: 22)
+                    .padding(.leading, 1)
+                    .transition(.scale(scale: 0.6).combined(with: .opacity))
+            }
+        }
         .contextMenu {
             Button {
                 renameTarget = conversation
@@ -259,6 +310,7 @@ struct SidebarView: View {
             } label: {
                 Label("Rename", systemImage: "pencil")
             }
+
             Button(role: .destructive) {
                 deleteTarget = conversation
                 showDeleteConfirmation = true
@@ -266,15 +318,26 @@ struct SidebarView: View {
                 Label("Delete", systemImage: "trash")
             }
         }
+        .animation(.easeOut(duration: 0.18), value: isSelected)
     }
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 11) {
             Spacer(minLength: 30)
 
-            Image(systemName: searchText.isEmpty ? "bubble.left.and.bubble.right" : "magnifyingglass")
-                .font(.system(size: 25, weight: .light))
-                .foregroundStyle(.tertiary)
+            ZStack {
+                Circle()
+                    .fill(OZOTheme.accent.opacity(0.10))
+                    .frame(width: 58, height: 58)
+
+                Circle()
+                    .strokeBorder(OZOTheme.accent.opacity(0.14), lineWidth: 1)
+                    .frame(width: 44, height: 44)
+
+                Image(systemName: searchText.isEmpty ? "bubble.left.and.bubble.right" : "magnifyingglass")
+                    .font(.system(size: 21, weight: .light))
+                    .foregroundStyle(searchText.isEmpty ? OZOTheme.accent : Color.secondary)
+            }
 
             Text(searchText.isEmpty ? "No chats yet" : "No matches")
                 .font(.system(size: 14, weight: .semibold))
@@ -297,15 +360,21 @@ struct SidebarView: View {
 
     private var footer: some View {
         VStack(spacing: 0) {
-            Divider().opacity(0.6)
+            Rectangle()
+                .fill(OZOTheme.hairline)
+                .frame(height: 0.5)
 
             Button(action: onOpenSettings) {
                 HStack(spacing: 10) {
-                    Image(systemName: "gearshape.fill")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 26, height: 26)
-                        .background(Circle().fill(Color.primary.opacity(0.05)))
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(OZOTheme.accent.opacity(0.10))
+                            .frame(width: 32, height: 32)
+
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(OZOTheme.accent)
+                    }
 
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Settings")
@@ -314,10 +383,13 @@ struct SidebarView: View {
 
                         HStack(spacing: 4) {
                             Circle()
-                                .fill(settings.hasAPIKey ? Color.green : Color.orange)
-                                .frame(width: 5, height: 5)
-                            Text(settings.hasAPIKey ? "\(settings.provider.shortName) connected" : "Add your API key")
-                                .font(.system(size: 9.5, weight: .medium))
+                                .fill(settings.hasAPIKey ? OZOTheme.positive : OZOTheme.warning)
+                                .frame(width: 4.5, height: 4.5)
+
+                            Text(settings.hasAPIKey
+                                 ? "\(settings.provider.shortName) connected"
+                                 : "Add your API key")
+                                .font(.system(size: 9, weight: .medium))
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -325,7 +397,7 @@ struct SidebarView: View {
                     Spacer()
 
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: 9.5, weight: .semibold))
                         .foregroundStyle(.tertiary)
                 }
                 .padding(.horizontal, 12)
@@ -338,7 +410,7 @@ struct SidebarView: View {
                 .font(.system(size: 8.5, weight: .medium))
                 .foregroundStyle(.quaternary)
                 .padding(.bottom, max(bottomInset, 10))
-                .padding(.top, 2)
+                .padding(.top, 1)
         }
     }
 

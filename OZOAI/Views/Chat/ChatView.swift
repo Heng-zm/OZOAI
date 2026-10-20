@@ -11,6 +11,7 @@ struct ChatView: View {
     let onOpenModelPicker: () -> Void
 
     @State private var lastStreamScrollCount = 0
+    @State private var isNearBottom = true
     @State private var showRenameAlert = false
     @State private var renameText = ""
     @State private var showClearConfirmation = false
@@ -35,6 +36,7 @@ struct ChatView: View {
             composerArea
         }
         .background(chatBackground)
+        .animation(.easeInOut(duration: 0.2), value: selectedModel.isAvailable(on: settings.provider))
         .onChange(of: store.currentID) { _, _ in
             speech.stop()
         }
@@ -70,50 +72,17 @@ struct ChatView: View {
     // MARK: - Header
 
     private var header: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             HeaderIconButton(systemName: "sidebar.left") {
                 Haptics.tap(settings.hapticsEnabled)
                 onOpenSidebar()
             }
 
-            Spacer(minLength: 2)
+            Spacer(minLength: 0)
 
-            Button {
-                Haptics.tap(settings.hapticsEnabled)
-                onOpenModelPicker()
-            } label: {
-                VStack(spacing: 1.5) {
-                    Text(store.isStreaming ? "RESPONDING…" : "OZO AI")
-                        .font(.system(size: 9, weight: .bold, design: .rounded))
-                        .tracking(1.1)
-                        .foregroundStyle(store.isStreaming ? OZOTheme.accent : Color.secondary)
+            modelSelector
 
-                    HStack(spacing: 6) {
-                        Circle()
-                            .fill(selectedModel.tint)
-                            .frame(width: 6, height: 6)
-
-                        Text(selectedModel.shortName)
-                            .font(.system(size: 13.5, weight: .semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 8.5, weight: .bold))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .frame(maxWidth: 205)
-                }
-                .padding(.horizontal, 13)
-                .padding(.vertical, 5.5)
-                .background(Capsule().fill(Color.primary.opacity(0.05)))
-                .overlay(Capsule().strokeBorder(OZOTheme.hairline, lineWidth: 0.7))
-            }
-            .buttonStyle(OZOPressStyle())
-            .accessibilityLabel("Model: \(selectedModel.name). Tap to change.")
-
-            Spacer(minLength: 2)
+            Spacer(minLength: 0)
 
             Menu {
                 if !store.messages.isEmpty {
@@ -146,10 +115,11 @@ struct ChatView: View {
                 }
             } label: {
                 Image(systemName: "ellipsis")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 14.5, weight: .semibold))
                     .foregroundStyle(.primary)
                     .frame(width: 36, height: 36)
-                    .background(Circle().fill(Color.primary.opacity(0.06)))
+                    .background(Circle().fill(Color.primary.opacity(0.055)))
+                    .overlay(Circle().strokeBorder(OZOTheme.hairline, lineWidth: 0.7))
                     .contentShape(Circle())
             }
             .accessibilityLabel("Chat options")
@@ -158,7 +128,7 @@ struct ChatView: View {
                 startNewChat()
             }
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 10)
         .padding(.vertical, 7)
         .background {
             Rectangle()
@@ -172,128 +142,259 @@ struct ChatView: View {
         }
     }
 
+    private var modelSelector: some View {
+        Button {
+            Haptics.tap(settings.hapticsEnabled)
+            onOpenModelPicker()
+        } label: {
+            HStack(spacing: 8) {
+                ZStack {
+                    Circle()
+                        .fill(selectedModel.tint.opacity(0.14))
+                        .frame(width: 29, height: 29)
+
+                    Image(systemName: selectedModel.symbol)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(selectedModel.tint)
+                }
+
+                VStack(alignment: .leading, spacing: 0.5) {
+                    HStack(spacing: 4) {
+                        Text(selectedModel.shortName)
+                            .font(.system(size: 13.5, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.78)
+
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(.tertiary)
+                    }
+
+                    Text(store.isStreaming ? "Responding…" : settings.provider.displayName)
+                        .font(.system(size: 9.5, weight: .medium))
+                        .foregroundStyle(store.isStreaming ? OZOTheme.accent : Color.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.leading, 4)
+            .padding(.trailing, 10)
+            .padding(.vertical, 4)
+            .frame(maxWidth: 220, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(OZOTheme.surface.opacity(0.92))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(OZOTheme.hairline, lineWidth: 0.8)
+            )
+            .shadow(color: .black.opacity(0.04), radius: 8, x: 0, y: 3)
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(OZOPressStyle(scale: 0.985))
+        .layoutPriority(1)
+        .accessibilityLabel("Model: \(selectedModel.name). \(settings.provider.displayName). Tap to change.")
+    }
+
     // MARK: - Messages
 
     private var modelAvailabilityBanner: some View {
-        HStack(spacing: 9) {
+        HStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 11.5, weight: .semibold))
                 .foregroundStyle(.orange)
+                .frame(width: 26, height: 26)
+                .background(Circle().fill(Color.orange.opacity(0.12)))
 
-            Text("\(selectedModel.shortName) isn't available on \(settings.provider.displayName).")
-                .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Model unavailable")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(.primary)
+
+                Text("\(selectedModel.shortName) isn't available on \(settings.provider.displayName).")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
 
             Spacer(minLength: 4)
 
-            Button("Change") {
+            Button {
+                Haptics.tap(settings.hapticsEnabled)
                 onOpenModelPicker()
+            } label: {
+                Text("Switch")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(OZOTheme.accent)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(OZOTheme.accent.opacity(0.10), in: Capsule())
             }
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(OZOTheme.accent)
+            .buttonStyle(OZOPressStyle())
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(Color.orange.opacity(0.08))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(Color.orange.opacity(0.075))
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(OZOTheme.hairline)
+                .fill(Color.orange.opacity(0.13))
                 .frame(height: 0.5)
         }
+        .transition(.move(edge: .top).combined(with: .opacity))
     }
 
     private var messageArea: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                if store.messages.isEmpty && !store.isStreaming {
-                    WelcomeView(
-                        model: selectedModel,
-                        hasAPIKey: settings.hasAPIKey,
-                        onSuggestion: sendSuggestion,
-                        onConnect: onOpenSettings,
-                        onChooseModel: onOpenModelPicker
-                    )
-                    .padding(.horizontal, 18)
-                    .padding(.top, 18)
-                } else {
-                    LazyVStack(spacing: 24) {
-                        ForEach(store.messages) { message in
-                            MessageRow(
-                                message: message,
-                                isLastAssistant: message.role == .assistant
-                                    && message.id == store.messages.last?.id,
-                                onRegenerate: regenerate
-                            )
-                            .equatable()
-                            .id(message.id)
-                        }
+        GeometryReader { geometry in
+            ScrollViewReader { proxy in
+                ScrollView {
+                    if store.messages.isEmpty && !store.isStreaming {
+                        WelcomeView(
+                            model: selectedModel,
+                            hasAPIKey: settings.hasAPIKey,
+                            onSuggestion: sendSuggestion,
+                            onConnect: onOpenSettings,
+                            onChooseModel: onOpenModelPicker
+                        )
+                        .padding(.horizontal, 18)
+                        .padding(.top, 18)
+                    } else {
+                        LazyVStack(spacing: 24) {
+                            ForEach(store.messages) { message in
+                                MessageRow(
+                                    message: message,
+                                    isLastAssistant: message.role == .assistant
+                                        && message.id == store.messages.last?.id,
+                                    onRegenerate: regenerate
+                                )
+                                .equatable()
+                                .id(message.id)
+                            }
 
-                        if store.isStreaming {
-                            StreamingRow(text: store.streamingText, model: selectedModel)
-                                .id("ozo-streaming")
-                                .transition(.opacity)
-                        }
+                            if store.isStreaming {
+                                StreamingRow(text: store.streamingText, model: selectedModel)
+                                    .id("ozo-streaming")
+                                    .transition(.opacity)
+                            }
 
-                        if let error = store.errorText {
-                            InlineErrorCard(
-                                message: error,
-                                onRetry: regenerate,
-                                onOpenSettings: onOpenSettings,
-                                onDismiss: dismissError
-                            )
-                        }
+                            if let error = store.errorText {
+                                InlineErrorCard(
+                                    message: error,
+                                    onRetry: regenerate,
+                                    onOpenSettings: onOpenSettings,
+                                    onDismiss: dismissError
+                                )
+                            }
 
-                        Color.clear
-                            .frame(height: 1)
-                            .id("ozo-bottom")
+                            Color.clear
+                                .frame(height: 1)
+                                .id("ozo-bottom")
+                                .background(
+                                    GeometryReader { bottom in
+                                        Color.clear.preference(
+                                            key: ChatBottomPreferenceKey.self,
+                                            value: bottom.frame(in: .named("ozo-chat-scroll")).maxY
+                                        )
+                                    }
+                                )
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 18)
+                        .padding(.bottom, 18)
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 18)
-                    .padding(.bottom, 14)
                 }
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .onChange(of: store.messages.count) { _, _ in
-                lastStreamScrollCount = 0
-                DispatchQueue.main.async {
-                    scrollToBottom(proxy, animated: true)
+                .coordinateSpace(name: "ozo-chat-scroll")
+                .scrollDismissesKeyboard(.interactively)
+                .onPreferenceChange(ChatBottomPreferenceKey.self) { bottomY in
+                    guard geometry.size.height > 0 else { return }
+                    let nearBottom = bottomY <= geometry.size.height + 110
+                    if nearBottom != isNearBottom {
+                        withAnimation(.easeOut(duration: 0.16)) {
+                            isNearBottom = nearBottom
+                        }
+                    }
                 }
-            }
-            .onChange(of: store.currentID) { _, _ in
-                lastStreamScrollCount = 0
-                DispatchQueue.main.async {
+                .onChange(of: store.messages.count) { _, _ in
+                    lastStreamScrollCount = 0
+                    isNearBottom = true
+                    DispatchQueue.main.async {
+                        scrollToBottom(proxy, animated: true)
+                    }
+                }
+                .onChange(of: store.currentID) { _, _ in
+                    lastStreamScrollCount = 0
+                    isNearBottom = true
+                    DispatchQueue.main.async {
+                        scrollToBottom(proxy, animated: false)
+                    }
+                }
+                .onChange(of: store.messages.isEmpty) { _, isEmpty in
+                    if isEmpty { isNearBottom = true }
+                }
+                .onChange(of: store.isStreaming) { _, streaming in
+                    guard streaming else { return }
+                    lastStreamScrollCount = 0
+                    isNearBottom = true
+                    DispatchQueue.main.async {
+                        scrollToBottom(proxy, animated: true)
+                    }
+                }
+                .onChange(of: store.streamingText) { _, newValue in
+                    guard store.isStreaming, isNearBottom else { return }
+
+                    // Scrolling on every token forces extra layout passes. Batching
+                    // it by a few words keeps the stream pinned to the bottom while
+                    // cutting the work roughly in half.
+                    let delta = newValue.count - lastStreamScrollCount
+                    guard delta >= 24 || delta < 0 else { return }
+                    lastStreamScrollCount = newValue.count
                     scrollToBottom(proxy, animated: false)
                 }
-            }
-            .onChange(of: store.isStreaming) { _, streaming in
-                guard streaming else { return }
-                lastStreamScrollCount = 0
-                DispatchQueue.main.async {
-                    scrollToBottom(proxy, animated: true)
+                .onChange(of: store.errorText) { _, newValue in
+                    if newValue != nil, isNearBottom {
+                        scrollToBottom(proxy, animated: true)
+                    }
                 }
-            }
-            .onChange(of: store.streamingText) { _, newValue in
-                guard store.isStreaming else { return }
-
-                // Scrolling on every token forces extra layout passes. Batching
-                // it by a few words keeps the stream pinned to the bottom while
-                // cutting the work roughly in half.
-                let delta = newValue.count - lastStreamScrollCount
-                guard delta >= 24 || delta < 0 else { return }
-                lastStreamScrollCount = newValue.count
-                scrollToBottom(proxy, animated: false)
-            }
-            .onChange(of: store.errorText) { _, newValue in
-                if newValue != nil {
-                    scrollToBottom(proxy, animated: true)
+                .onAppear {
+                    guard !store.messages.isEmpty else { return }
+                    DispatchQueue.main.async {
+                        proxy.scrollTo("ozo-bottom", anchor: .bottom)
+                    }
                 }
-            }
-            .onAppear {
-                guard !store.messages.isEmpty else { return }
-                DispatchQueue.main.async {
-                    proxy.scrollTo("ozo-bottom", anchor: .bottom)
+                .overlay(alignment: .bottomTrailing) {
+                    if !isNearBottom {
+                        Button {
+                            Haptics.tap(settings.hapticsEnabled)
+                            isNearBottom = true
+                            scrollToBottom(proxy, animated: true)
+                        } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: "arrow.down")
+                                    .font(.system(size: 10, weight: .bold))
+                                Text("Latest")
+                                    .font(.system(size: 11, weight: .semibold))
+                            }
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 7)
+                            .background(
+                                Capsule()
+                                    .fill(.regularMaterial)
+                            )
+                            .overlay(
+                                Capsule()
+                                    .strokeBorder(OZOTheme.hairline, lineWidth: 0.8)
+                            )
+                            .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
+                        }
+                        .buttonStyle(OZOPressStyle())
+                        .accessibilityLabel("Jump to latest message")
+                        .padding(.trailing, 14)
+                        .padding(.bottom, 10)
+                        .transition(.scale(scale: 0.9).combined(with: .opacity))
+                    }
                 }
+                .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isNearBottom)
             }
         }
     }
@@ -332,6 +433,20 @@ struct ChatView: View {
         ZStack {
             OZOTheme.background
             OZOTheme.ambient
+
+            RadialGradient(
+                colors: [OZOTheme.accent.opacity(0.075), .clear],
+                center: .topLeading,
+                startRadius: 10,
+                endRadius: 430
+            )
+
+            RadialGradient(
+                colors: [OZOTheme.violet.opacity(0.05), .clear],
+                center: .bottomTrailing,
+                startRadius: 20,
+                endRadius: 470
+            )
         }
         .ignoresSafeArea()
     }
@@ -442,5 +557,13 @@ struct ChatView: View {
         } else {
             proxy.scrollTo("ozo-bottom", anchor: .bottom)
         }
+    }
+}
+
+private struct ChatBottomPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }

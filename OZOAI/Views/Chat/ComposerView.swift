@@ -82,7 +82,7 @@ struct ComposerView: View {
     // MARK: - Input bar
 
     private var inputBar: some View {
-        HStack(alignment: .bottom, spacing: 4) {
+        HStack(alignment: .bottom, spacing: 2) {
             PhotosPicker(
                 selection: $photoItem,
                 matching: .images,
@@ -97,13 +97,13 @@ struct ComposerView: View {
             .disabled(isStreaming)
             .accessibilityLabel("Attach a photo")
 
-            TextField("Message OZO AI", text: $text, axis: .vertical)
+            TextField("Ask anything…", text: $text, axis: .vertical)
                 .focused($isFocused)
                 .font(.system(size: 16))
                 .lineLimit(1...6)
                 .lineSpacing(2)
-                .padding(.vertical, 8)
-                .padding(.horizontal, 2)
+                .padding(.vertical, 9)
+                .padding(.horizontal, 4)
                 .textInputAutocapitalization(.sentences)
                 .submitLabel(.return)
                 .accessibilityLabel("Message")
@@ -121,7 +121,7 @@ struct ComposerView: View {
                 ZStack {
                     Circle()
                         .fill(speech.isRecording ? Color.red.opacity(0.12) : Color.clear)
-                        .frame(width: 34, height: 34)
+                        .frame(width: 36, height: 36)
 
                     Image(systemName: speech.isRecording ? "waveform" : "mic.fill")
                         .font(.system(size: 14, weight: .semibold))
@@ -137,10 +137,10 @@ struct ComposerView: View {
                     ZStack {
                         Circle()
                             .fill(Color.primary)
-                            .frame(width: 34, height: 34)
-                        Image(systemName: "stop.fill")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(Color(uiColor: .systemBackground))
+                            .frame(width: 36, height: 36)
+                        RoundedRectangle(cornerRadius: 2.2, style: .continuous)
+                            .fill(Color(uiColor: .systemBackground))
+                            .frame(width: 10, height: 10)
                     }
                 }
                 .buttonStyle(OZOPressStyle())
@@ -159,7 +159,12 @@ struct ComposerView: View {
                                     ? AnyShapeStyle(OZOTheme.userBubbleGradient)
                                     : AnyShapeStyle(Color.primary.opacity(0.08))
                             )
-                            .frame(width: 34, height: 34)
+                            .frame(width: 36, height: 36)
+                            .shadow(
+                                color: canSend ? OZOTheme.accent.opacity(0.24) : .clear,
+                                radius: 8,
+                                y: 3
+                            )
 
                         Image(systemName: "arrow.up")
                             .font(.system(size: 15, weight: .bold))
@@ -172,18 +177,27 @@ struct ComposerView: View {
                 .transition(.scale.combined(with: .opacity))
             }
         }
-        .padding(.leading, 6)
-        .padding(.trailing, 6)
-        .padding(.vertical, 5)
+        .padding(.leading, 7)
+        .padding(.trailing, 7)
+        .padding(.vertical, 6)
         .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(OZOTheme.surface)
+            RoundedRectangle(cornerRadius: 27, style: .continuous)
+                .fill(OZOTheme.surface.opacity(0.96))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .strokeBorder(OZOTheme.hairline, lineWidth: 0.9)
+            RoundedRectangle(cornerRadius: 27, style: .continuous)
+                .strokeBorder(
+                    isFocused ? OZOTheme.accent.opacity(0.36) : OZOTheme.hairline,
+                    lineWidth: isFocused ? 1.15 : 0.9
+                )
         )
-        .shadow(color: Color.black.opacity(0.055), radius: 14, x: 0, y: 5)
+        .shadow(
+            color: isFocused ? OZOTheme.accent.opacity(0.08) : Color.black.opacity(0.055),
+            radius: isFocused ? 18 : 14,
+            x: 0,
+            y: 5
+        )
+        .animation(.easeOut(duration: 0.18), value: isFocused)
     }
 
     // MARK: - Attachment
@@ -298,10 +312,11 @@ struct ComposerView: View {
 
     private func composerButtonLabel(systemName: String, foreground: Color) -> some View {
         Image(systemName: systemName)
-            .font(.system(size: 17, weight: .medium))
+            .font(.system(size: 16, weight: .medium))
             .foregroundStyle(foreground)
-            .frame(width: 34, height: 34)
-            .background(Circle().fill(Color.primary.opacity(0.055)))
+            .frame(width: 36, height: 36)
+            .background(Circle().fill(Color.primary.opacity(0.045)))
+            .overlay(Circle().strokeBorder(OZOTheme.hairline, lineWidth: 0.6))
     }
 
     private func resetComposer() {

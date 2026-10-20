@@ -21,6 +21,11 @@ struct MessageRow: View, Equatable {
         }
     }
 
+    private var assistantModel: AIModel? {
+        guard let modelName = message.modelName else { return nil }
+        return AIModel.all.first { $0.shortName == modelName }
+    }
+
     // MARK: - User
 
     private var userMessage: some View {
@@ -43,6 +48,7 @@ struct MessageRow: View, Equatable {
                             OZOTheme.userBubbleGradient,
                             in: RoundedRectangle(cornerRadius: 21, style: .continuous)
                         )
+                        .shadow(color: OZOTheme.accent.opacity(0.11), radius: 8, y: 3)
                         .textSelection(.enabled)
                 }
             }
@@ -54,7 +60,7 @@ struct MessageRow: View, Equatable {
 
     private var assistantMessage: some View {
         HStack(alignment: .top, spacing: 10) {
-            OZOLogo(size: 28)
+            OZOLogo(size: 29)
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 7) {
@@ -62,10 +68,10 @@ struct MessageRow: View, Equatable {
                         .font(.system(size: 13, weight: .semibold, design: .rounded))
 
                     if let modelName = message.modelName {
-                        Text(modelName)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(1)
+                        AssistantModelTag(
+                            name: modelName,
+                            tint: assistantModel?.tint ?? .secondary
+                        )
                     }
 
                     Spacer(minLength: 0)
@@ -73,7 +79,7 @@ struct MessageRow: View, Equatable {
 
                 MarkdownMessageView(text: message.text)
 
-                HStack(spacing: 16) {
+                HStack(spacing: 7) {
                     Button {
                         UIPasteboard.general.string = message.text
                         Haptics.success(settings.hapticsEnabled)
@@ -82,29 +88,65 @@ struct MessageRow: View, Equatable {
                             withAnimation(.easeOut(duration: 0.18)) { copied = false }
                         }
                     } label: {
-                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(copied ? OZOTheme.accent : Color.secondary)
-                            .frame(width: 24, height: 24)
+                        messageActionLabel(
+                            title: copied ? "Copied" : "Copy",
+                            icon: copied ? "checkmark" : "doc.on.doc",
+                            tint: copied ? OZOTheme.accent : Color.secondary
+                        )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(OZOPressStyle(scale: 0.96))
                     .accessibilityLabel(copied ? "Copied" : "Copy response")
 
                     if isLastAssistant {
                         Button(action: onRegenerate) {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 24, height: 24)
+                            messageActionLabel(
+                                title: "Retry",
+                                icon: "arrow.clockwise",
+                                tint: Color.secondary
+                            )
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(OZOPressStyle(scale: 0.96))
                         .accessibilityLabel("Regenerate response")
                     }
                 }
-                .padding(.top, 1)
+                .padding(.top, 2)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func messageActionLabel(title: String, icon: String, tint: Color) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .semibold))
+            Text(title)
+                .font(.system(size: 10.5, weight: .semibold))
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(Color.primary.opacity(0.045), in: Capsule())
+    }
+}
+
+private struct AssistantModelTag: View {
+    let name: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Circle()
+                .fill(tint)
+                .frame(width: 4.5, height: 4.5)
+
+            Text(name)
+                .font(.system(size: 9.5, weight: .medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2.5)
+        .background(Color.primary.opacity(0.04), in: Capsule())
     }
 }
 
@@ -150,17 +192,23 @@ struct StreamingRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            OZOLogo(size: 28)
+            OZOLogo(size: 29)
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 7) {
                     Text("OZO AI")
                         .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    Text(model.shortName)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
+
+                    AssistantModelTag(name: model.shortName, tint: model.tint)
+
                     Spacer(minLength: 0)
+
+                    Text("Responding")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(OZOTheme.accent)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2.5)
+                        .background(OZOTheme.accent.opacity(0.09), in: Capsule())
                 }
 
                 if text.isEmpty {

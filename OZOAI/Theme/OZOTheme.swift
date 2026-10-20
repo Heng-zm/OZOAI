@@ -5,7 +5,11 @@ import UIKit
 
 enum OZOTheme {
     static let accent = Color(hex: 0x10B5A5)
+    static let accentBright = Color(hex: 0x2DD4BF)
     static let accentDeep = Color(hex: 0x0E7490)
+    static let violet = Color(hex: 0x8B5CF6)
+    static let warning = Color(hex: 0xF59E0B)
+    static let positive = Color(hex: 0x22C55E)
 
     static let brandGradient = LinearGradient(
         colors: [Color(hex: 0x2DD4BF), Color(hex: 0x3B82F6), Color(hex: 0x8B5CF6)],
@@ -146,7 +150,7 @@ extension Date {
 // MARK: - Shared surfaces
 
 extension View {
-    func ozoCard(cornerRadius: CGFloat = 20) -> some View {
+    func ozoCard(cornerRadius: CGFloat = 20, shadow: Bool = false) -> some View {
         background(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(OZOTheme.surface)
@@ -154,6 +158,12 @@ extension View {
         .overlay(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .strokeBorder(OZOTheme.hairline, lineWidth: 0.8)
+        )
+        .shadow(
+            color: .black.opacity(shadow ? 0.045 : 0),
+            radius: shadow ? 16 : 0,
+            x: 0,
+            y: shadow ? 7 : 0
         )
     }
 }

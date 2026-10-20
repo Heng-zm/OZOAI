@@ -20,47 +20,58 @@ struct ModelPickerView: View {
         }
     }
 
+    private var availableModels: [AIModel] {
+        filteredModels.filter { $0.isAvailable(on: settings.provider) }
+    }
+
+    private var unavailableModels: [AIModel] {
+        filteredModels.filter { !$0.isAvailable(on: settings.provider) }
+    }
+
+    private var availableCount: Int {
+        AIModel.all.filter { $0.isAvailable(on: settings.provider) }.count
+    }
+
+    private var freeCount: Int {
+        AIModel.all.filter {
+            $0.isAvailable(on: settings.provider) && $0.isFree(on: settings.provider)
+        }.count
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 10) {
-                    hero
+                VStack(alignment: .leading, spacing: 16) {
+                    providerSummary
 
                     if filteredModels.isEmpty {
-                        VStack(spacing: 10) {
-                            Image(systemName: "magnifyingglass")
-                                .font(.system(size: 24, weight: .light))
-                                .foregroundStyle(.tertiary)
-                            Text("No models match “\(query)”")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundStyle(.secondary)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 40)
+                        emptyState
                     } else {
-                        ForEach(filteredModels) { model in
-                            let isAvailable = model.isAvailable(on: settings.provider)
+                        if !availableModels.isEmpty {
+                            modelGroup(
+                                title: settings.provider == .openCode
+                                    ? "All models"
+                                    : "Available on \(settings.provider.shortName)",
+                                models: availableModels
+                            )
+                        }
 
-                            Button {
-                                guard isAvailable else { return }
-                                Haptics.tap(settings.hapticsEnabled)
-                                onSelect(model)
-                                dismiss()
-                            } label: {
-                                modelRow(model)
-                            }
-                            .buttonStyle(OZOPressStyle(scale: 0.985))
-                            .disabled(!isAvailable)
+                        if !unavailableModels.isEmpty {
+                            modelGroup(
+                                title: "OpenCode Zen only",
+                                models: unavailableModels
+                            )
                         }
                     }
 
                     footnote
                 }
                 .padding(.horizontal, 15)
-                .padding(.top, 6)
-                .padding(.bottom, 22)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
             }
-            .background(OZOTheme.groupedBackground)
+            .scrollDismissesKeyboard(.interactively)
+            .background(background.ignoresSafeArea())
             .navigationTitle("Choose a model")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(
@@ -80,45 +91,118 @@ struct ModelPickerView: View {
         .presentationCornerRadius(28)
     }
 
-    // MARK: - Hero
+    // MARK: - Provider summary
 
-    private var hero: some View {
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Ten models. One place.")
-                    .font(.system(size: 19, weight: .bold, design: .rounded))
+    private var providerSummary: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(providerTint.opacity(0.13))
+                    .frame(width: 44, height: 44)
+
+                Image(systemName: settings.provider.symbol)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(providerTint)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(settings.provider.displayName)
+                    .font(.system(size: 14.5, weight: .semibold))
                     .foregroundStyle(.primary)
 
-                Text(settings.provider == .openCode
-                     ? "Pick the brain that fits your task. All ten models are free on OpenCode Zen."
-                     : "Pick the brain that fits your task. Free and paid OpenRouter models are marked below.")
-                    .font(.system(size: 12))
+                Text(providerSummaryText)
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer(minLength: 4)
 
-            ZStack {
-                Circle()
-                    .fill(OZOTheme.brandGradient)
-                    .frame(width: 46, height: 46)
-                Image(systemName: "sparkles")
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(.white)
+            VStack(spacing: 1) {
+                Text("\(availableCount)")
+                    .font(.system(size: 19, weight: .bold, design: .rounded))
+                    .foregroundStyle(providerTint)
+                Text("of 10")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
             }
-            .shadow(color: OZOTheme.accent.opacity(0.3), radius: 10, y: 4)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
+            .background(providerTint.opacity(0.08), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
         }
-        .padding(15)
+        .padding(13)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(OZOTheme.accent.opacity(0.065))
+                .fill(
+                    LinearGradient(
+                        colors: [providerTint.opacity(0.075), OZOTheme.violet.opacity(0.035)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
         )
         .overlay(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(OZOTheme.accent.opacity(0.16), lineWidth: 0.8)
+                .strokeBorder(providerTint.opacity(0.16), lineWidth: 0.8)
         )
-        .padding(.bottom, 4)
+    }
+
+    private var providerSummaryText: String {
+        switch settings.provider {
+        case .openCode:
+            return "All ten models are included and free for a limited time."
+        case .openRouter:
+            return "\(availableCount) supported models · \(freeCount) free, \(availableCount - freeCount) use credits."
+        }
+    }
+
+    private var providerTint: Color {
+        settings.provider == .openCode ? OZOTheme.accent : OZOTheme.violet
+    }
+
+    // MARK: - Groups
+
+    private func modelGroup(title: String, models: [AIModel]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text(title.uppercased())
+                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                    .tracking(0.9)
+                    .foregroundStyle(.tertiary)
+
+                Text("\(models.count)")
+                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .foregroundStyle(.quaternary)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1.5)
+                    .background(Color.primary.opacity(0.04), in: Capsule())
+
+                Spacer()
+            }
+            .padding(.horizontal, 4)
+
+            VStack(spacing: 8) {
+                ForEach(models) { model in
+                    modelButton(model)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func modelButton(_ model: AIModel) -> some View {
+        let isAvailable = model.isAvailable(on: settings.provider)
+
+        Button {
+            guard isAvailable else { return }
+            Haptics.tap(settings.hapticsEnabled)
+            onSelect(model)
+            dismiss()
+        } label: {
+            modelRow(model)
+        }
+        .buttonStyle(OZOPressStyle(scale: 0.985))
+        .disabled(!isAvailable)
     }
 
     // MARK: - Row
@@ -132,6 +216,7 @@ struct ModelPickerView: View {
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
                     .fill(model.tint.opacity(0.12))
                     .frame(width: 44, height: 44)
+
                 Image(systemName: model.symbol)
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(model.tint)
@@ -163,9 +248,10 @@ struct ModelPickerView: View {
                     .padding(.top, 1)
 
                 if !isAvailable, let note = model.availabilityNote(on: settings.provider) {
-                    Text(note)
+                    Label(note, systemImage: "lock.fill")
                         .font(.system(size: 9.5, weight: .medium))
                         .foregroundStyle(.orange)
+                        .padding(.top, 1)
                 }
 
                 HStack(spacing: 4) {
@@ -194,7 +280,7 @@ struct ModelPickerView: View {
                 )
         )
         .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .opacity(isAvailable ? 1 : 0.58)
+        .opacity(isAvailable ? 1 : 0.56)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(model.name), \(model.tagline)")
         .accessibilityValue(
@@ -231,6 +317,29 @@ struct ModelPickerView: View {
         }
         .frame(width: 22, height: 24)
         .animation(.spring(response: 0.28, dampingFraction: 0.8), value: isSelected)
+        .accessibilityHidden(true)
+    }
+
+    // MARK: - Empty
+
+    private var emptyState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 22, weight: .light))
+                .foregroundStyle(.tertiary)
+                .frame(width: 48, height: 48)
+                .background(Color.primary.opacity(0.04), in: Circle())
+
+            Text("No models match “\(query)”")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            Text("Try a model name, maker or capability.")
+                .font(.system(size: 11.5))
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 38)
     }
 
     private var footnote: some View {
@@ -242,10 +351,24 @@ struct ModelPickerView: View {
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
 
-            Text("A bullet marks the model currently in use.")
+            Text("A filled bullet marks the model currently in use.")
                 .font(.system(size: 10))
                 .foregroundStyle(.quaternary)
         }
-        .padding(.top, 10)
+        .frame(maxWidth: .infinity)
+        .padding(.top, 4)
+    }
+
+    private var background: some View {
+        ZStack {
+            OZOTheme.groupedBackground
+
+            RadialGradient(
+                colors: [providerTint.opacity(0.055), .clear],
+                center: .topLeading,
+                startRadius: 0,
+                endRadius: 420
+            )
+        }
     }
 }

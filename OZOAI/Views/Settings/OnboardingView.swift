@@ -1,15 +1,18 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 struct OnboardingView: View {
     @EnvironmentObject private var settings: AppSettings
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("ozo.onboardingDismissed") private var onboardingDismissed = false
 
     @State private var keyDraft = ""
     @State private var showKey = false
     @State private var saveError: String?
     @State private var appeared = false
+    @FocusState private var keyFocused: Bool
 
     var body: some View {
         ZStack {
@@ -17,12 +20,12 @@ struct OnboardingView: View {
                 .ignoresSafeArea()
 
             ScrollView {
-                VStack(spacing: 25) {
+                VStack(spacing: 20) {
                     topBar
                     hero
-                    features
                     connectCard
                     exploreButton
+                    featureStrip
                     privacyNote
                 }
                 .padding(.horizontal, 22)
@@ -31,12 +34,23 @@ struct OnboardingView: View {
                 .frame(maxWidth: 560)
                 .frame(maxWidth: .infinity)
             }
+            .scrollDismissesKeyboard(.interactively)
             .scrollIndicators(.hidden)
         }
         .preferredColorScheme(.dark)
         .onAppear {
-            withAnimation(.spring(response: 0.7, dampingFraction: 0.85)) {
+            guard !appeared else { return }
+            if reduceMotion {
                 appeared = true
+            } else {
+                withAnimation(.spring(response: 0.7, dampingFraction: 0.85)) {
+                    appeared = true
+                }
+            }
+        }
+        .onChange(of: keyDraft) { _, _ in
+            if saveError != nil {
+                saveError = nil
             }
         }
     }
@@ -71,14 +85,18 @@ struct OnboardingView: View {
 
     private var topBar: some View {
         HStack {
+            Text("WELCOME TO OZO")
+                .font(.system(size: 9, weight: .bold, design: .rounded))
+                .tracking(1.5)
+                .foregroundStyle(.white.opacity(0.34))
+
             Spacer()
 
             Button {
-                onboardingDismissed = true
-                dismiss()
+                finishOnboarding()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 12.5, weight: .bold))
                     .foregroundStyle(.white.opacity(0.72))
                     .frame(width: 34, height: 34)
                     .background(Circle().fill(.white.opacity(0.08)))
@@ -92,27 +110,31 @@ struct OnboardingView: View {
     // MARK: - Hero
 
     private var hero: some View {
-        VStack(spacing: 15) {
+        VStack(spacing: 13) {
             ZStack {
                 Circle()
-                    .fill(Color(hex: 0x14B8A6).opacity(0.25))
+                    .fill(Color(hex: 0x14B8A6).opacity(0.23))
                     .frame(width: 150, height: 150)
                     .blur(radius: 36)
 
-                OZOLogo(size: 90)
+                Circle()
+                    .strokeBorder(Color(hex: 0x2DD4BF).opacity(0.13), lineWidth: 1)
+                    .frame(width: 106, height: 106)
+
+                OZOLogo(size: 74)
             }
-            .frame(height: 120)
-            .scaleEffect(appeared ? 1 : 0.82)
+            .frame(height: 102)
+            .scaleEffect(appeared ? 1 : 0.84)
             .opacity(appeared ? 1 : 0)
 
-            VStack(spacing: 8) {
+            VStack(spacing: 6) {
                 Text("OZO AI")
-                    .font(.system(size: 43, weight: .bold, design: .rounded))
-                    .tracking(-1.4)
+                    .font(.system(size: 38, weight: .bold, design: .rounded))
+                    .tracking(-1.3)
                     .foregroundStyle(.white)
 
                 Text("Ten powerful models. One beautiful chat.")
-                    .font(.system(size: 15.5))
+                    .font(.system(size: 14.5))
                     .foregroundStyle(.white.opacity(0.58))
                     .multilineTextAlignment(.center)
 
@@ -121,75 +143,21 @@ struct OnboardingView: View {
                     tag("Vision", color: Color(hex: 0x8B5CF6))
                     tag("Voice", color: Color(hex: 0x60A5FA))
                 }
-                .padding(.top, 3)
+                .padding(.top, 2)
             }
             .offset(y: appeared ? 0 : 10)
             .opacity(appeared ? 1 : 0)
         }
-        .padding(.top, 2)
     }
 
     private func tag(_ text: String, color: Color) -> some View {
         Text(text)
-            .font(.system(size: 10, weight: .semibold))
+            .font(.system(size: 9.5, weight: .semibold))
             .foregroundStyle(color)
             .padding(.horizontal, 9)
             .padding(.vertical, 4)
             .background(color.opacity(0.11), in: Capsule())
             .overlay(Capsule().strokeBorder(color.opacity(0.16), lineWidth: 0.7))
-    }
-
-    // MARK: - Features
-
-    private var features: some View {
-        VStack(spacing: 10) {
-            featureRow(
-                icon: "sparkles",
-                tint: Color(hex: 0xF59E0B),
-                title: "Every model in one place",
-                subtitle: "DeepSeek, GLM, MiniMax, Nemotron and more — switch brains with one tap."
-            )
-            featureRow(
-                icon: "eye.fill",
-                tint: Color(hex: 0x8B5CF6),
-                title: "See and speak",
-                subtitle: "Analyze photos with a vision model and dictate messages with your voice."
-            )
-            featureRow(
-                icon: "lock.shield.fill",
-                tint: Color(hex: 0x2DD4BF),
-                title: "Private by design",
-                subtitle: "Your API key lives in Keychain. Chat history stays on this iPhone."
-            )
-        }
-    }
-
-    private func featureRow(icon: String, tint: Color, title: String, subtitle: String) -> some View {
-        HStack(alignment: .top, spacing: 13) {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(tint)
-                .frame(width: 36, height: 36)
-                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
-                Text(subtitle)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(0.52))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(13)
-        .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(.white.opacity(0.07), lineWidth: 0.7)
-        )
     }
 
     // MARK: - Connect
@@ -204,11 +172,13 @@ struct OnboardingView: View {
                 Text("Connect \(settings.provider.displayName)")
                     .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
 
-                Spacer()
+                Spacer(minLength: 4)
 
                 Text(settings.provider == .openCode ? "FREE" : "OPTIONAL")
-                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                    .font(.system(size: 8.5, weight: .bold, design: .rounded))
                     .tracking(0.6)
                     .foregroundStyle(Color(hex: 0x2DD4BF))
                     .padding(.horizontal, 7)
@@ -216,41 +186,53 @@ struct OnboardingView: View {
                     .background(Color(hex: 0x14B8A6).opacity(0.13), in: Capsule())
             }
 
-            Picker("Provider", selection: Binding(
-                get: { settings.provider },
-                set: { newProvider in
-                    settings.provider = newProvider
-                    keyDraft = settings.apiKey
-                    saveError = nil
-                    showKey = false
-                }
-            )) {
+            HStack(spacing: 3) {
                 ForEach(AIProvider.allCases) { provider in
-                    Text(provider.displayName).tag(provider)
+                    providerButton(provider)
                 }
             }
-            .pickerStyle(.segmented)
+            .padding(3)
+            .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.07), lineWidth: 0.7)
+            )
 
             Text(settings.provider == .openCode
-                 ? "Paste your OpenCode API key to unlock all ten models. The key is stored securely on this iPhone."
-                 : "Paste your OpenRouter key to use supported models. Free models are marked in the picker; others use OpenRouter credits.")
-                .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.55))
+                 ? "Paste your OpenCode key to unlock all ten models. It's stored securely on this iPhone."
+                 : "Paste your OpenRouter key to use supported models. Free models are marked in the picker.")
+                .font(.system(size: 11.5))
+                .foregroundStyle(.white.opacity(0.53))
                 .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: 8) {
+            HStack(spacing: 7) {
                 Group {
                     if showKey {
                         TextField(settings.provider.keyPlaceholder, text: $keyDraft)
+                            .focused($keyFocused)
                     } else {
                         SecureField(settings.provider.keyPlaceholder, text: $keyDraft)
+                            .focused($keyFocused)
                     }
                 }
-                .font(.system(size: 13.5, design: .monospaced))
+                .font(.system(size: 13, design: .monospaced))
                 .foregroundStyle(.white)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .textContentType(.password)
                 .tint(Color(hex: 0x2DD4BF))
+                .submitLabel(.done)
+
+                Button("Paste") {
+                    pasteKey()
+                }
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Color(hex: 0x2DD4BF))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background(Color(hex: 0x14B8A6).opacity(0.12), in: Capsule())
+                .buttonStyle(.plain)
+                .accessibilityLabel(keyDraft.isEmpty ? "Paste key from clipboard" : "Replace key from clipboard")
 
                 Button {
                     showKey.toggle()
@@ -258,16 +240,25 @@ struct OnboardingView: View {
                     Image(systemName: showKey ? "eye.slash.fill" : "eye.fill")
                         .font(.system(size: 13))
                         .foregroundStyle(.white.opacity(0.45))
+                        .frame(width: 22, height: 24)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(showKey ? "Hide API key" : "Show API key")
             }
-            .padding(.horizontal, 13)
-            .padding(.vertical, 12)
-            .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .background(
+                Color.white.opacity(keyFocused ? 0.075 : 0.055),
+                in: RoundedRectangle(cornerRadius: 13, style: .continuous)
+            )
             .overlay(
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .strokeBorder(.white.opacity(0.09), lineWidth: 0.8)
+                    .strokeBorder(
+                        keyFocused ? Color(hex: 0x2DD4BF).opacity(0.55) : Color.white.opacity(0.09),
+                        lineWidth: keyFocused ? 1.1 : 0.8
+                    )
             )
+            .animation(.easeOut(duration: 0.18), value: keyFocused)
 
             if let saveError {
                 Text(saveError)
@@ -278,69 +269,182 @@ struct OnboardingView: View {
             Button {
                 connect()
             } label: {
-                HStack(spacing: 7) {
+                HStack(spacing: 6) {
                     Text("Start chatting")
                     Image(systemName: "arrow.right")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(size: 11.5, weight: .bold))
                 }
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 14.5, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 13)
+                .padding(.vertical, 12)
                 .background(
                     OZOTheme.brandGradient,
-                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    in: RoundedRectangle(cornerRadius: 13, style: .continuous)
                 )
-                .opacity(keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.42 : 1)
+                .shadow(
+                    color: canConnect ? Color(hex: 0x10B5A5).opacity(0.26) : .clear,
+                    radius: 12,
+                    y: 5
+                )
+                .opacity(canConnect ? 1 : 0.42)
             }
             .buttonStyle(OZOPressStyle())
-            .disabled(keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(!canConnect)
 
             Link(destination: settings.provider.consoleURL) {
                 HStack(spacing: 3) {
                     Text(settings.provider == .openCode ? "Get your free API key" : "Get your OpenRouter key")
                     Image(systemName: "arrow.up.right")
-                        .font(.system(size: 8, weight: .bold))
+                        .font(.system(size: 7.5, weight: .bold))
                 }
-                .font(.system(size: 11.5, weight: .semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(Color(hex: 0x2DD4BF))
                 .frame(maxWidth: .infinity)
             }
         }
         .padding(16)
-        .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 21, style: .continuous))
+        .background(
+            Color.white.opacity(0.045),
+            in: RoundedRectangle(cornerRadius: 21, style: .continuous)
+        )
         .overlay(
             RoundedRectangle(cornerRadius: 21, style: .continuous)
-                .strokeBorder(.white.opacity(0.08), lineWidth: 0.8)
+                .strokeBorder(Color.white.opacity(0.09), lineWidth: 0.8)
         )
+        .shadow(color: .black.opacity(0.20), radius: 24, y: 12)
+        .offset(y: appeared ? 0 : 12)
+        .opacity(appeared ? 1 : 0)
     }
 
-    // MARK: - Explore + privacy
+    private var canConnect: Bool {
+        !keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func providerButton(_ provider: AIProvider) -> some View {
+        let isSelected = settings.provider == provider
+
+        return Button {
+            guard provider != settings.provider else { return }
+            settings.provider = provider
+            keyDraft = settings.apiKey
+            saveError = nil
+            showKey = false
+            Haptics.tap(settings.hapticsEnabled)
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: provider.symbol)
+                    .font(.system(size: 10.5, weight: .semibold))
+                Text(provider.displayName)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(isSelected ? .white : .white.opacity(0.50))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(
+                isSelected ? Color.white.opacity(0.12) : Color.clear,
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(
+                        isSelected ? Color.white.opacity(0.10) : Color.clear,
+                        lineWidth: 0.7
+                    )
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+    }
+
+    // MARK: - Features + escape
 
     private var exploreButton: some View {
         Button {
-            onboardingDismissed = true
-            Haptics.tap(settings.hapticsEnabled)
-            dismiss()
+            finishOnboarding()
         } label: {
             Text("Explore first")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.white.opacity(0.48))
-                .padding(.vertical, 4)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.white.opacity(0.44))
+                .padding(.vertical, 2)
         }
         .buttonStyle(.plain)
+    }
+
+    private var featureStrip: some View {
+        HStack(spacing: 8) {
+            featureChip(
+                icon: "square.stack.3d.up.fill",
+                tint: Color(hex: 0x2DD4BF),
+                title: "10 models",
+                detail: "All in one"
+            )
+            featureChip(
+                icon: "eye.fill",
+                tint: Color(hex: 0x8B5CF6),
+                title: "Vision",
+                detail: "Photos + voice"
+            )
+            featureChip(
+                icon: "lock.shield.fill",
+                tint: Color(hex: 0x60A5FA),
+                title: "Private",
+                detail: "On-device"
+            )
+        }
+    }
+
+    private func featureChip(icon: String, tint: Color, title: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 28, height: 28)
+                .background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+
+            Text(detail)
+                .font(.system(size: 8.5, weight: .medium))
+                .foregroundStyle(.white.opacity(0.42))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(Color.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.065), lineWidth: 0.7)
+        )
     }
 
     private var privacyNote: some View {
         HStack(spacing: 5) {
             Image(systemName: "lock.fill")
-            Text("Your key is never sent anywhere except \(settings.provider.displayName)")
+            Text("Your key stays in Keychain and is sent only to \(settings.provider.displayName)")
         }
-        .font(.system(size: 9.5, weight: .medium))
+        .font(.system(size: 9, weight: .medium))
         .foregroundStyle(.white.opacity(0.28))
+        .multilineTextAlignment(.center)
     }
 
     // MARK: - Actions
+
+    private func pasteKey() {
+        guard let value = UIPasteboard.general.string else { return }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        keyDraft = trimmed
+        saveError = nil
+        Haptics.soft(settings.hapticsEnabled)
+    }
 
     private func connect() {
         let trimmed = keyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -358,6 +462,12 @@ struct OnboardingView: View {
         saveError = nil
         onboardingDismissed = true
         Haptics.success(settings.hapticsEnabled)
+        dismiss()
+    }
+
+    private func finishOnboarding() {
+        onboardingDismissed = true
+        Haptics.tap(settings.hapticsEnabled)
         dismiss()
     }
 }
