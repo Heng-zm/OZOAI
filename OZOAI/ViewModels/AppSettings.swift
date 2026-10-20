@@ -45,7 +45,13 @@ final class AppSettings: ObservableObject {
     - Ask a short clarifying question only when a request is genuinely ambiguous.
     """
 
-    @Published var apiKey: String
+    @Published var provider: AIProvider = .openCode {
+        didSet {
+            defaults.set(provider.rawValue, forKey: "ozo.provider")
+        }
+    }
+    @Published private(set) var openCodeAPIKey: String = ""
+    @Published private(set) var openRouterAPIKey: String = ""
     @Published var systemPrompt: String
     @Published var temperature: Double
     @Published var hapticsEnabled: Bool
@@ -55,7 +61,15 @@ final class AppSettings: ObservableObject {
     private let defaults = UserDefaults.standard
 
     init() {
-        apiKey = KeychainStore.readAPIKey()
+        if let raw = defaults.string(forKey: "ozo.provider"),
+           let savedProvider = AIProvider(rawValue: raw) {
+            provider = savedProvider
+        } else {
+            provider = .openCode
+        }
+
+        openCodeAPIKey = KeychainStore.readAPIKey(for: .openCode)
+        openRouterAPIKey = KeychainStore.readAPIKey(for: .openRouter)
 
         systemPrompt = defaults.object(forKey: "ozo.systemPrompt") as? String
             ?? Self.defaultSystemPrompt
@@ -74,6 +88,22 @@ final class AppSettings: ObservableObject {
         defaultModelID = AIModel.all.contains(where: { $0.id == savedModel }) ? savedModel : AIModel.defaultID
     }
 
+    var apiKey: String {
+        get {
+            switch provider {
+            case .openCode: return openCodeAPIKey
+            case .openRouter: return openRouterAPIKey
+            }
+        }
+        set {
+            let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            switch provider {
+            case .openCode: openCodeAPIKey = trimmed
+            case .openRouter: openRouterAPIKey = trimmed
+            }
+        }
+    }
+
     var hasAPIKey: Bool {
         !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -83,6 +113,7 @@ final class AppSettings: ObservableObject {
     }
 
     func savePreferences() {
+        defaults.set(provider.rawValue, forKey: "ozo.provider")
         defaults.set(systemPrompt, forKey: "ozo.systemPrompt")
         defaults.set(temperature, forKey: "ozo.temperature")
         defaults.set(hapticsEnabled, forKey: "ozo.haptics")
@@ -95,15 +126,15 @@ final class AppSettings: ObservableObject {
         let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         apiKey = trimmed
         if trimmed.isEmpty {
-            KeychainStore.deleteAPIKey()
+            KeychainStore.deleteAPIKey(for: provider)
             return true
         }
-        return KeychainStore.saveAPIKey(trimmed)
+        return KeychainStore.saveAPIKey(trimmed, for: provider)
     }
 
     func removeAPIKey() {
         apiKey = ""
-        KeychainStore.deleteAPIKey()
+        KeychainStore.deleteAPIKey(for: provider)
     }
 
     func setDefaultModel(_ id: String) {

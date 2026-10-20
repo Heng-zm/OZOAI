@@ -39,7 +39,10 @@ struct ModelPickerView: View {
                         .padding(.top, 40)
                     } else {
                         ForEach(filteredModels) { model in
+                            let isAvailable = model.isAvailable(on: settings.provider)
+
                             Button {
+                                guard isAvailable else { return }
                                 Haptics.tap(settings.hapticsEnabled)
                                 onSelect(model)
                                 dismiss()
@@ -47,6 +50,7 @@ struct ModelPickerView: View {
                                 modelRow(model)
                             }
                             .buttonStyle(OZOPressStyle(scale: 0.985))
+                            .disabled(!isAvailable)
                         }
                     }
 
@@ -81,11 +85,13 @@ struct ModelPickerView: View {
     private var hero: some View {
         HStack(spacing: 14) {
             VStack(alignment: .leading, spacing: 5) {
-                Text("Ten models. All free.")
+                Text("Ten models. One place.")
                     .font(.system(size: 19, weight: .bold, design: .rounded))
                     .foregroundStyle(.primary)
 
-                Text("Pick the brain that fits your task. Switch anytime — even mid-conversation.")
+                Text(settings.provider == .openCode
+                     ? "Pick the brain that fits your task. All ten models are free on OpenCode Zen."
+                     : "Pick the brain that fits your task. Free and paid OpenRouter models are marked below.")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -119,6 +125,7 @@ struct ModelPickerView: View {
 
     private func modelRow(_ model: AIModel) -> some View {
         let isSelected = model.id == selectedID
+        let isAvailable = model.isAvailable(on: settings.provider)
 
         return HStack(alignment: .center, spacing: 12) {
             ZStack {
@@ -138,8 +145,8 @@ struct ModelPickerView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.82)
 
-                    if model.showsFreeBadge {
-                        OZOBadge(text: "Free", tint: OZOTheme.accent)
+                    if let badge = model.badgeText(on: settings.provider) {
+                        OZOBadge(text: badge, tint: badgeTint(for: badge))
                     }
                 }
 
@@ -154,6 +161,12 @@ struct ModelPickerView: View {
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 1)
+
+                if !isAvailable, let note = model.availabilityNote(on: settings.provider) {
+                    Text(note)
+                        .font(.system(size: 9.5, weight: .medium))
+                        .foregroundStyle(.orange)
+                }
 
                 HStack(spacing: 4) {
                     ForEach(model.badges, id: \.self) { badge in
@@ -181,9 +194,23 @@ struct ModelPickerView: View {
                 )
         )
         .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .opacity(isAvailable ? 1 : 0.58)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(model.name), \(model.tagline)")
-        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityValue(
+            isSelected
+                ? "Selected"
+                : (isAvailable ? "Not selected" : "Not available on \(settings.provider.displayName)")
+        )
+    }
+
+    private func badgeTint(for badge: String) -> Color {
+        switch badge {
+        case "Free": return .green
+        case "Credits": return .orange
+        case "OpenCode only": return .gray
+        default: return OZOTheme.accent
+        }
     }
 
     private func selectionIndicator(isSelected: Bool, tint: Color) -> some View {
@@ -208,9 +235,12 @@ struct ModelPickerView: View {
 
     private var footnote: some View {
         VStack(spacing: 4) {
-            Text("All ten models are free on OpenCode Zen.")
+            Text(settings.provider == .openCode
+                 ? "All ten models are free on OpenCode Zen."
+                 : "Free OpenRouter models are marked. Big Pickle and LongCat 2.5 Preview are OpenCode-only.")
                 .font(.system(size: 10.5, weight: .medium))
                 .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
 
             Text("A bullet marks the model currently in use.")
                 .font(.system(size: 10))

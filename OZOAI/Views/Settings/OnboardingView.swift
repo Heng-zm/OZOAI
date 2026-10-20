@@ -117,7 +117,7 @@ struct OnboardingView: View {
                     .multilineTextAlignment(.center)
 
                 HStack(spacing: 6) {
-                    tag("10 free models", color: Color(hex: 0x2DD4BF))
+                    tag("10 models", color: Color(hex: 0x2DD4BF))
                     tag("Vision", color: Color(hex: 0x8B5CF6))
                     tag("Voice", color: Color(hex: 0x60A5FA))
                 }
@@ -201,13 +201,13 @@ struct OnboardingView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color(hex: 0x2DD4BF))
 
-                Text("Connect OpenCode Zen")
+                Text("Connect \(settings.provider.displayName)")
                     .font(.system(size: 16, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
 
                 Spacer()
 
-                Text("FREE")
+                Text(settings.provider == .openCode ? "FREE" : "OPTIONAL")
                     .font(.system(size: 9, weight: .bold, design: .rounded))
                     .tracking(0.6)
                     .foregroundStyle(Color(hex: 0x2DD4BF))
@@ -216,7 +216,24 @@ struct OnboardingView: View {
                     .background(Color(hex: 0x14B8A6).opacity(0.13), in: Capsule())
             }
 
-            Text("Paste your OpenCode API key to unlock all ten models. The key is stored securely on this iPhone.")
+            Picker("Provider", selection: Binding(
+                get: { settings.provider },
+                set: { newProvider in
+                    settings.provider = newProvider
+                    keyDraft = settings.apiKey
+                    saveError = nil
+                    showKey = false
+                }
+            )) {
+                ForEach(AIProvider.allCases) { provider in
+                    Text(provider.displayName).tag(provider)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Text(settings.provider == .openCode
+                 ? "Paste your OpenCode API key to unlock all ten models. The key is stored securely on this iPhone."
+                 : "Paste your OpenRouter key to use supported models. Free models are marked in the picker; others use OpenRouter credits.")
                 .font(.system(size: 12))
                 .foregroundStyle(.white.opacity(0.55))
                 .fixedSize(horizontal: false, vertical: true)
@@ -224,9 +241,9 @@ struct OnboardingView: View {
             HStack(spacing: 8) {
                 Group {
                     if showKey {
-                        TextField("sk-…", text: $keyDraft)
+                        TextField(settings.provider.keyPlaceholder, text: $keyDraft)
                     } else {
-                        SecureField("sk-…", text: $keyDraft)
+                        SecureField(settings.provider.keyPlaceholder, text: $keyDraft)
                     }
                 }
                 .font(.system(size: 13.5, design: .monospaced))
@@ -279,9 +296,9 @@ struct OnboardingView: View {
             .buttonStyle(OZOPressStyle())
             .disabled(keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
-            Link(destination: URL(string: "https://opencode.ai/console")!) {
+            Link(destination: settings.provider.consoleURL) {
                 HStack(spacing: 3) {
-                    Text("Get your free API key")
+                    Text(settings.provider == .openCode ? "Get your free API key" : "Get your OpenRouter key")
                     Image(systemName: "arrow.up.right")
                         .font(.system(size: 8, weight: .bold))
                 }
@@ -317,7 +334,7 @@ struct OnboardingView: View {
     private var privacyNote: some View {
         HStack(spacing: 5) {
             Image(systemName: "lock.fill")
-            Text("Your key is never sent anywhere except OpenCode")
+            Text("Your key is never sent anywhere except \(settings.provider.displayName)")
         }
         .font(.system(size: 9.5, weight: .medium))
         .foregroundStyle(.white.opacity(0.28))

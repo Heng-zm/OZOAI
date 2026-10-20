@@ -1,6 +1,8 @@
 # OZO AI
 
-A native **SwiftUI** iPhone app with a ChatGPT-style interface for **ten free OpenCode Zen models**. It streams replies, renders Markdown and code, keeps a local chat history, supports photo analysis and voice dictation, and stores your OpenCode API key in the iOS Keychain.
+A native **SwiftUI** iPhone app with a ChatGPT-style interface for **ten OpenCode Zen models**, with **OpenRouter as an optional second provider**. It streams replies, renders Markdown and code, keeps a local chat history, supports photo analysis and voice dictation, and stores provider API keys in the iOS Keychain.
+
+OpenCode Zen remains the default provider, and the ten-model catalog is unchanged. If you prefer OpenRouter, switch providers in **Settings → AI provider** and add a separate OpenRouter key.
 
 The included GitHub Actions workflow builds an **unsigned IPA** on a macOS runner, so you do not need a Mac to produce the app. On Windows you can sign and install that IPA with **Sideloadly** and your Apple ID.
 
@@ -8,22 +10,26 @@ The included GitHub Actions workflow builds an **unsigned IPA** on a macOS runne
 
 ## Included models
 
-| | Model | OpenCode model ID | Best for |
-|---|---|---|---|
-| ● | **GLM-5.3-Flash Free** | `glm-5.3-flash-free` | Fast everyday chat — **default model** |
-| | Big Pickle | `big-pickle` | Creative and out-of-the-box thinking |
-| | DeepSeek V4.1 Flash Free | `deepseek-v4.1-flash-free` | Reasoning and coding |
-| | MiniMax M3.1 Flash Free | `minimax-m3.1-flash-free` | Quick, expressive answers |
-| | Nemotron 3.5 Super VL Free | `nemotron-3.5-super-vl-free` | **Vision** — analyze photos |
-| | Beam Free | `beam-free` | Very fast, short replies |
-| | LongCat 2.5 Preview Free | `longcat-2.5-preview-free` | Long documents and pasted text |
-| | MiMo-V2.6-Flash Free | `mimo-v2.6-flash-free` | Efficient mobile-scale answers |
-| | Nemotron 3.5 Lightning Free | `nemotron-3.5-lightning-free` | Low-latency back-and-forth |
-| | Nemotron 3 Ultra Free | `nemotron-3-ultra-free` | Hard reasoning and large code |
+The same ten models are always listed. OpenCode Zen is the default; OpenRouter availability and pricing are shown separately.
+
+| | Model | OpenCode Zen ID | OpenRouter ID | Best for |
+|---|---|---|---|---|
+| ● | **GLM-5.3-Flash Free** | `glm-5.3-flash-free` | `z-ai/glm-5.3-flash` (credits) | Fast everyday chat — **default model** |
+| | Big Pickle | `big-pickle` | — *OpenCode only* | Creative and out-of-the-box thinking |
+| | DeepSeek V4.1 Flash Free | `deepseek-v4.1-flash-free` | `deepseek/deepseek-v4.1-flash` (credits) | Reasoning and coding |
+| | MiniMax M3.1 Flash Free | `minimax-m3.1-flash-free` | `minimax/minimax-m3.1-flash:free` | Quick, expressive answers |
+| | Nemotron 3.5 Super VL Free | `nemotron-3.5-super-vl-free` | `nvidia/nemotron-3.5-super-vl:free` | **Vision** — analyze photos |
+| | Beam Free | `beam-free` | `reflection/beam-1.0-501b-a23b` (credits) | Very fast, short replies |
+| | LongCat 2.5 Preview Free | `longcat-2.5-preview-free` | — *OpenCode only* | Long documents and pasted text |
+| | MiMo-V2.6-Flash Free | `mimo-v2.6-flash-free` | `xiaomi/mimo-v2.6-flash` (credits) | Efficient mobile-scale answers |
+| | Nemotron 3.5 Lightning Free | `nemotron-3.5-lightning-free` | `nvidia/nemotron-3.5-lightning:free` | Low-latency back-and-forth |
+| | Nemotron 3 Ultra Free | `nemotron-3-ultra-free` | `nvidia/nemotron-3-ultra-550b-a55b:free` | Hard reasoning and large code |
 
 GLM-5.3-Flash Free is preselected. In the model picker, the model currently in use is marked with a **filled bullet** and a highlighted card; the picker footer explains the bullet.
 
-All ten model IDs and their free pricing were checked against the [OpenCode Zen documentation](https://opencode.ai/docs/zen). Free access is time-limited and controlled by OpenCode, so a model can be changed or retired later.
+On OpenCode Zen, all ten model IDs and their free pricing were checked against the [OpenCode Zen documentation](https://opencode.ai/docs/zen). Free access is time-limited and controlled by OpenCode, so a model can be changed or retired later.
+
+On OpenRouter, **four models are free** (MiniMax, Nemotron Super VL, Nemotron Lightning, Nemotron Ultra) and **four use OpenRouter credits** (DeepSeek, GLM, Beam, MiMo). **Big Pickle and LongCat 2.5 Preview are OpenCode-only**; they are shown but disabled when OpenRouter is selected. OpenRouter model IDs and availability were checked against the [OpenRouter models API](https://openrouter.ai/api/v1/models).
 
 ---
 
@@ -37,7 +43,8 @@ All ten model IDs and their free pricing were checked against the [OpenCode Zen 
 - **Regenerate** the latest response, clear a conversation, or start a new chat.
 - **Photo attachments** for the vision model, with automatic resizing and JPEG compression. If you attach a photo while a text-only model is selected, the app offers to switch and will automatically use the vision model when you send.
 - **Voice dictation** using Apple's Speech framework, with microphone/speech permission handling.
-- **API key in Keychain**, never in the project or in `UserDefaults`.
+- **Two optional providers**: OpenCode Zen is the default; OpenRouter can be enabled in Settings with its own key and model availability badges.
+- **API keys in Keychain**, stored separately per provider and never in the project or in `UserDefaults`.
 - **Custom instructions**, temperature control, haptic feedback, and System/Light/Dark appearance.
 - **Local persistence** of conversations in Application Support as JSON.
 - **No analytics, no tracking, no bundled API key.**
@@ -47,14 +54,17 @@ All ten model IDs and their free pricing were checked against the [OpenCode Zen 
 ## Requirements
 
 - An iPhone on **iOS 17 or later**.
-- An **OpenCode Console API key** (the ten models are free, but access requires a key).
+- An **OpenCode Console API key** for the default provider (the ten models are free, but access requires a key).
+- Optional: an **OpenRouter API key** if you want to use the second provider. OpenRouter's free models do not need credits; its paid models do.
 - **For the cloud build:** a GitHub account. No Mac required.
 - **For installing on Windows:** [Sideloadly](https://sideloadly.io/) and an Apple ID. `SideloadlySetup64.exe` is already in your Downloads folder.
 - Optional: a Mac with Xcode 15+ if you want to build and run locally.
 
 ---
 
-## 1. Get your OpenCode API key
+## 1. Get an API key
+
+### OpenCode Zen (default)
 
 1. Open [opencode.ai/console](https://opencode.ai/console) and sign in.
 2. Create/copy an API key from the Console.
@@ -62,7 +72,14 @@ All ten model IDs and their free pricing were checked against the [OpenCode Zen 
 
 > OpenCode may ask you to add billing details before creating a key. The ten models above are listed at **$0 per token**, and the key itself is free, but free availability is promotional and can change. You can review current pricing and availability in the [Zen docs](https://opencode.ai/docs/zen).
 
-The app intentionally ships **without** a key. On first launch you will see a connect screen; you can paste the key there or later in **Settings → OpenCode Zen connection**.
+### OpenRouter (optional)
+
+1. Open [openrouter.ai/keys](https://openrouter.ai/keys) and sign in.
+2. Create/copy an OpenRouter API key.
+3. In OZO AI, open **Settings → AI provider**, choose **OpenRouter**, then paste the key in **OpenRouter connection**.
+4. Use one of the four free OpenRouter models to chat without credits, or add credits to your OpenRouter account for the paid models.
+
+The app intentionally ships **without** a key. On first launch you will see a connect screen; you can choose either provider there or later in **Settings**. Keys are stored separately, so adding OpenRouter does not replace your OpenCode key.
 
 ---
 
@@ -132,7 +149,7 @@ The workflow builds the IPA and attaches it (plus the checksum) to a GitHub Rele
 5. On the iPhone, trust the developer certificate:
    - **iOS 16 and later:** open **Settings → Privacy & Security → Developer Mode**, turn it on, and restart the iPhone.
    - If the app says **Untrusted Developer**, open **Settings → General → VPN & Device Management → Developer App → your Apple ID → Trust**.
-6. Open **OZO AI**, paste your OpenCode API key, and tap **Start chatting**.
+6. Open **OZO AI**, choose OpenCode Zen or OpenRouter, paste the matching API key, and tap **Start chatting**.
 
 ### Free vs. paid Apple ID
 
@@ -179,28 +196,41 @@ The generated `OZOAI.xcodeproj` is intentionally ignored by Git. Regenerate it w
 
 ---
 
-## 5. How the OpenCode integration works
+## 5. How the provider integrations work
+
+### OpenCode Zen (default)
 
 - **Endpoint:** `POST https://opencode.ai/inference/openai/v1/chat/completions`
 - **Auth:** `Authorization: Bearer <your OpenCode API key>`
+- **Models:** the ten OpenCode IDs listed above. All ten are free on OpenCode Zen.
+
+### OpenRouter (optional)
+
+- **Endpoint:** `POST https://openrouter.ai/api/v1/chat/completions`
+- **Auth:** `Authorization: Bearer <your OpenRouter API key>`
+- **Attribution headers:** `HTTP-Referer: https://github.com/Heng-zm/OZOAI` and `X-Title: OZO AI`
+- **Models:** the OpenRouter IDs listed above. Four are free and four use credits; two OpenCode-only models are disabled in the picker.
+- **Key test:** Settings validates an OpenRouter key with the free `nvidia/nemotron-3.5-lightning:free` model, so no credits are needed just to test the key.
+
+### Shared behavior
+
 - **Streaming:** OpenAI-compatible SSE (`data: {...}`, terminated by `data: [DONE]`).
-- **Default request:** the selected model ID, full conversation context (last 24 messages), custom system prompt, and temperature.
+- **Request:** the selected provider's model ID, full conversation context (last 24 messages), custom system prompt, and temperature.
 - **Vision:** photos are converted to JPEG data URLs and sent as OpenAI `image_url` content parts. Only **Nemotron 3.5 Super VL Free** is marked as vision-capable. If a photo is attached while another model is selected, the app offers to switch and automatically uses the vision model if you send anyway. Historical photos are omitted from requests to text-only models.
-- **Key test:** Settings uses a tiny non-streaming completion to verify that the key can reach the model service.
 - **History:** the last 100 conversations are kept in `Application Support/OZOAI/chat-history.json`; the last 24 messages of a conversation are sent to the model.
 
-The model metadata lives in `OZOAI/Models/AIModel.swift`. If OpenCode changes or retires a model, update its name/ID there and rebuild.
+The model metadata and provider mapping live in `OZOAI/Models/AIModel.swift` and `OZOAI/Models/AIProvider.swift`. If a provider changes or retires a model, update its ID there and rebuild.
 
 ---
 
 ## 6. Security and privacy
 
-- The API key is stored in the **iOS Keychain** using `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`.
-- It is sent only to the OpenCode endpoint. There is no analytics SDK, proxy server, or third-party tracking.
+- API keys are stored separately in the **iOS Keychain** using `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` (`opencode-api-key` and `openrouter-api-key`).
+- A key is sent only to the provider you selected. There is no analytics SDK, proxy server, or third-party tracking.
 - Chats are stored in the app's sandbox on the iPhone and are not synced by OZO AI. They are not encrypted by the app beyond iOS's normal data protection.
 - The app has no server component and no bundled credentials.
-- Deleting a conversation or clearing all chats removes the local copy. Removing the key deletes it from Keychain.
-- Prompts and photos are sent to OpenCode and the model's upstream provider. Free-model data policies vary. Notably, some NVIDIA free endpoints are trial endpoints and should not receive personal or confidential data; Beam Free has regional restrictions. Read the [OpenCode Zen privacy notes](https://opencode.ai/docs/zen) before sending sensitive information.
+- Deleting a conversation or clearing all chats removes the local copy. Removing a key deletes only that provider's key from Keychain.
+- Prompts and photos are sent to the selected provider and the model's upstream provider. Free-model data policies vary. Notably, some NVIDIA free endpoints are trial endpoints and should not receive personal or confidential data; Beam Free has regional restrictions. Read the [OpenCode Zen privacy notes](https://opencode.ai/docs/zen) or [OpenRouter's data policies](https://openrouter.ai/docs) before sending sensitive information.
 
 ---
 
@@ -209,11 +239,11 @@ The model metadata lives in `OZOAI/Models/AIModel.swift`. If OpenCode changes or
 | Problem | Fix |
 |---|---|
 | GitHub Actions build fails | Download the `xcodebuild-log` artifact, find the first `error:` line, and fix the Swift file. The project was generated and syntax-checked locally, but a full Xcode compile can only run on macOS. |
-| `401` / “API key wasn't accepted” | Re-copy the key from OpenCode Console; remove accidental spaces; save it again in Settings. |
-| `403` access denied | The key may be invalid for that model, the model may be unavailable in your region, or the free promotion may have ended. This is especially relevant for **Beam Free**, which is not available in certain regions (check the Zen docs). Try another model. |
-| `402` credits required | Free models should not charge, but billing/account restrictions can still apply. Check your Console account and try another free model. |
-| `429` too many requests | Wait a few seconds and retry. Free endpoints can be rate-limited. |
-| `404` model not found | The model may have been retired. Check the Zen docs and update `AIModel.swift`. |
+| `401` / “API key wasn't accepted” | Re-copy the key from the provider you selected (OpenCode Console or OpenRouter Keys); remove accidental spaces; save it again in Settings. |
+| `403` access denied | The key may be invalid for that model, the model may be unavailable in your region, or the free promotion may have ended. This is especially relevant for **Beam Free**, which is not available in certain regions (check the provider docs). Try another model. |
+| `402` credits required | On OpenRouter, the model is paid. Pick one of the four free OpenRouter models (MiniMax, Nemotron Super VL, Nemotron Lightning, Nemotron Ultra) or add credits. On OpenCode, billing/account restrictions can still apply. |
+| `429` too many requests | Wait a few seconds and retry. Both providers rate-limit free endpoints; OpenRouter's free-model limits can be stricter. |
+| `404` model not found | The model may have been retired. Check the provider's model list and update `AIModel.swift` or `AIProvider.swift`. |
 | Empty response | The service may be busy or the model may only have produced reasoning tokens. Retry, stop and regenerate, or switch models. |
 | “Untrusted Developer” | Settings → General → VPN & Device Management → Developer App → your Apple ID → Trust. |
 | App will not launch on iOS 16+ | Enable **Developer Mode** in Settings → Privacy & Security, then restart the iPhone. |
@@ -232,7 +262,7 @@ OZOAI/
 ├── OZOAI/
 │   ├── App/                          # App entry point and RootView
 │   ├── Models/                       # AIModel catalog and wire/chat models
-│   ├── Services/                     # OpenCode SSE client, Keychain, storage, speech
+│   ├── Services/                     # Provider SSE client, Keychain, storage, speech
 │   ├── Theme/                        # Palette, logo, haptics, shared styles
 │   ├── ViewModels/                   # ChatStore and AppSettings
 │   ├── Views/
@@ -250,12 +280,12 @@ OZOAI/
 
 ## 9. Notes and limitations
 
-- OZO AI is an independent client, not an official OpenCode or model-provider app.
+- OZO AI is an independent client, not an official OpenCode, OpenRouter, or model-provider app.
 - Model names and trademarks belong to their respective owners.
-- It requires internet access and an OpenCode API key. There is no offline model.
+- It requires internet access and an API key for the selected provider. There is no offline model.
 - The app is iPhone-only, portrait, and built for iOS 17+.
 - The unsigned IPA is for personal sideloading. It is not an App Store build.
-- Free model availability, rate limits, and data policies are controlled by OpenCode and can change at any time.
+- Free model availability, rate limits, and data policies are controlled by OpenCode and OpenRouter and can change at any time. OpenRouter paid models require credits on your OpenRouter account.
 - The app comes with no warranty. Verify important information independently.
 
-If you want to extend it, start with `OZOAI/Models/AIModel.swift` (model catalog), `OZOAI/Services/OpenCodeService.swift` (API client), and `OZOAI/ViewModels/ChatStore.swift` (chat state).
+If you want to extend it, start with `OZOAI/Models/AIModel.swift` (model catalog), `OZOAI/Models/AIProvider.swift` (provider and OpenRouter mapping), `OZOAI/Services/AIClient.swift` (API client), and `OZOAI/ViewModels/ChatStore.swift` (chat state).

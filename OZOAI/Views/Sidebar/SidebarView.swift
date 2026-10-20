@@ -316,7 +316,7 @@ struct SidebarView: View {
                             Circle()
                                 .fill(settings.hasAPIKey ? Color.green : Color.orange)
                                 .frame(width: 5, height: 5)
-                            Text(settings.hasAPIKey ? "OpenCode connected" : "Add your API key")
+                            Text(settings.hasAPIKey ? "\(settings.provider.shortName) connected" : "Add your API key")
                                 .font(.system(size: 9.5, weight: .medium))
                                 .foregroundStyle(.secondary)
                         }
@@ -334,7 +334,7 @@ struct SidebarView: View {
             }
             .buttonStyle(.plain)
 
-            Text("OZO AI 1.0 · Powered by OpenCode Zen")
+            Text("OZO AI 1.0 · \(settings.provider.displayName)")
                 .font(.system(size: 8.5, weight: .medium))
                 .foregroundStyle(.quaternary)
                 .padding(.bottom, max(bottomInset, 10))

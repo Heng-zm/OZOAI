@@ -3,13 +3,12 @@ import Security
 
 enum KeychainStore {
     private static let service = "com.ozoai.app"
-    private static let account = "opencode-api-key"
 
-    static func readAPIKey() -> String {
+    static func readAPIKey(for provider: AIProvider) -> String {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
+            kSecAttrAccount as String: provider.keychainAccount,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
@@ -24,16 +23,16 @@ enum KeychainStore {
     }
 
     @discardableResult
-    static func saveAPIKey(_ value: String) -> Bool {
+    static func saveAPIKey(_ value: String, for provider: AIProvider) -> Bool {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        deleteAPIKey()
+        deleteAPIKey(for: provider)
         guard !trimmed.isEmpty, let data = trimmed.data(using: .utf8) else { return true }
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecAttrLabel as String: "OZO AI — OpenCode Zen",
+            kSecAttrAccount as String: provider.keychainAccount,
+            kSecAttrLabel as String: "OZO AI — \(provider.displayName)",
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
@@ -41,11 +40,11 @@ enum KeychainStore {
         return SecItemAdd(query as CFDictionary, nil) == errSecSuccess
     }
 
-    static func deleteAPIKey() {
+    static func deleteAPIKey(for provider: AIProvider) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account
+            kSecAttrAccount as String: provider.keychainAccount
         ]
         SecItemDelete(query as CFDictionary)
     }

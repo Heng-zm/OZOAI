@@ -22,6 +22,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 identitySection
+                providerSection
                 connectionSection
                 modelSection
                 personalizationSection
@@ -52,6 +53,11 @@ struct SettingsView: View {
                 settings.savePreferences()
             }
             .onChange(of: apiKeyDraft) { _, _ in
+                testResult = nil
+            }
+            .onChange(of: settings.provider) { _, _ in
+                apiKeyDraft = settings.apiKey
+                showKey = false
                 testResult = nil
             }
             .confirmationDialog(
@@ -97,7 +103,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("OZO AI")
                         .font(.system(size: 21, weight: .bold, design: .rounded))
-                    Text("Ten free models, one beautiful chat.")
+                    Text("Ten models, one beautiful chat.")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }
@@ -116,6 +122,31 @@ struct SettingsView: View {
         .listRowBackground(Color.clear)
     }
 
+    // MARK: - Provider
+
+    private var providerSection: some View {
+        Section {
+            Picker("API provider", selection: Binding(
+                get: { settings.provider },
+                set: { newProvider in
+                    settings.provider = newProvider
+                    apiKeyDraft = settings.apiKey
+                    showKey = false
+                    testResult = nil
+                }
+            )) {
+                ForEach(AIProvider.allCases) { provider in
+                    Text(provider.displayName).tag(provider)
+                }
+            }
+            .pickerStyle(.segmented)
+        } header: {
+            Text("AI provider")
+        } footer: {
+            Text("OpenCode Zen includes all ten models free. OpenRouter is optional and may use credits for some models; free and paid models are marked in the model picker.")
+        }
+    }
+
     // MARK: - Connection
 
     private var connectionSection: some View {
@@ -128,9 +159,9 @@ struct SettingsView: View {
 
                 Group {
                     if showKey {
-                        TextField("sk-…", text: $apiKeyDraft)
+                        TextField(settings.provider.keyPlaceholder, text: $apiKeyDraft)
                     } else {
-                        SecureField("sk-…", text: $apiKeyDraft)
+                        SecureField(settings.provider.keyPlaceholder, text: $apiKeyDraft)
                     }
                 }
                 .font(.system(size: 13.5, design: .monospaced))
@@ -197,13 +228,18 @@ struct SettingsView: View {
                 .transition(.opacity)
             }
         } header: {
-            Text("OpenCode Zen connection")
+            Text(settings.provider.connectionTitle)
         } footer: {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Your key is stored only in this iPhone's Keychain and is sent directly to OpenCode. OZO AI never sees it.")
-                Link(destination: URL(string: "https://opencode.ai/console")!) {
+                Text("Your key is stored only in this iPhone's Keychain and is sent directly to \(settings.provider.displayName). OZO AI never sees it.")
+
+                if settings.provider == .openRouter {
+                    Text("Free OpenRouter models are marked in the picker. Other models use your OpenRouter credits.")
+                }
+
+                Link(destination: settings.provider.consoleURL) {
                     HStack(spacing: 3) {
-                        Text("Get a free API key")
+                        Text(settings.provider.consoleLinkTitle)
                         Image(systemName: "arrow.up.right")
                             .font(.system(size: 8, weight: .bold))
                     }
@@ -267,7 +303,14 @@ struct SettingsView: View {
         } header: {
             Text("Model")
         } footer: {
-            Text("New conversations start with this model. The model picker inside a chat marks the active model with a bullet.")
+            VStack(alignment: .leading, spacing: 4) {
+                Text("New conversations start with this model. The model picker inside a chat marks the active model with a bullet.")
+
+                if let note = settings.defaultModel.availabilityNote(on: settings.provider) {
+                    Text("\(settings.defaultModel.shortName): \(note).")
+                        .foregroundStyle(.orange)
+                }
+            }
         }
     }
 
@@ -392,9 +435,9 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Link(destination: URL(string: "https://opencode.ai/console")!) {
+            Link(destination: settings.provider.consoleURL) {
                 HStack {
-                    Label("OpenCode Console", systemImage: "globe")
+                    Label("\(settings.provider.displayName) Console", systemImage: "globe")
                     Spacer()
                     Image(systemName: "arrow.up.right")
                         .font(.system(size: 11, weight: .semibold))
@@ -402,7 +445,7 @@ struct SettingsView: View {
                 }
             }
 
-            Link(destination: URL(string: "https://opencode.ai/docs/zen")!) {
+            Link(destination: settings.provider.docsURL) {
                 HStack {
                     Label("Model & pricing docs", systemImage: "doc.text")
                     Spacer()
@@ -414,7 +457,7 @@ struct SettingsView: View {
         } header: {
             Text("About")
         } footer: {
-            Text("OZO AI is an independent SwiftUI client for OpenCode Zen. Models, availability and free periods are provided by OpenCode.")
+            Text("OZO AI is an independent SwiftUI client for OpenCode Zen and OpenRouter. Models, availability and pricing are provided by each service.")
         }
     }
 
@@ -445,7 +488,7 @@ struct SettingsView: View {
 
         Task { @MainActor in
             do {
-                try await OpenCodeClient.shared.validate(apiKey: key)
+                try await AIClient.shared.validate(provider: settings.provider, apiKey: key)
                 testResult = .success("Connection works. Save the key to start chatting.")
                 Haptics.success(settings.hapticsEnabled)
             } catch {

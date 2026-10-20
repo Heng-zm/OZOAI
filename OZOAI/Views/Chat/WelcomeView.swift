@@ -98,8 +98,8 @@ struct WelcomeView: View {
                         .foregroundStyle(.primary)
                         .lineLimit(1)
 
-                    if model.showsFreeBadge {
-                        OZOBadge(text: "Free")
+                    if let badge = model.badgeText(on: settings.provider) {
+                        OZOBadge(text: badge, tint: badgeTint(for: badge))
                     }
 
                     Image(systemName: "chevron.down")
@@ -138,10 +138,12 @@ struct WelcomeView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("Connect OpenCode Zen")
+                        Text("Connect \(settings.provider.displayName)")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.primary)
-                        Text("Add a free API key to unlock all 10 models.")
+                        Text(settings.provider == .openCode
+                             ? "Add a free API key to unlock all 10 models."
+                             : "Add your OpenRouter key to use free and paid models.")
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.leading)
@@ -219,12 +221,23 @@ struct WelcomeView: View {
             .font(.system(size: 10, weight: .medium))
             .foregroundStyle(.tertiary)
 
-            Text("All 10 included models are free for a limited time")
+            Text(settings.provider == .openCode
+                 ? "All 10 included models are free for a limited time"
+                 : "Free OpenRouter models are marked in the picker")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.quaternary)
         }
         .padding(.top, 4)
         .padding(.bottom, 18)
+    }
+
+    private func badgeTint(for badge: String) -> Color {
+        switch badge {
+        case "Free": return .green
+        case "Credits": return .orange
+        case "OpenCode only": return .gray
+        default: return OZOTheme.accent
+        }
     }
 
     private var greeting: String {

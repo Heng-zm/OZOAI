@@ -26,6 +26,11 @@ struct ChatView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+
+            if !selectedModel.isAvailable(on: settings.provider) {
+                modelAvailabilityBanner
+            }
+
             messageArea
             composerArea
         }
@@ -169,6 +174,35 @@ struct ChatView: View {
 
     // MARK: - Messages
 
+    private var modelAvailabilityBanner: some View {
+        HStack(spacing: 9) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.orange)
+
+            Text("\(selectedModel.shortName) isn't available on \(settings.provider.displayName).")
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 4)
+
+            Button("Change") {
+                onOpenModelPicker()
+            }
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(OZOTheme.accent)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(Color.orange.opacity(0.08))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(OZOTheme.hairline)
+                .frame(height: 0.5)
+        }
+    }
+
     private var messageArea: some View {
         ScrollViewReader { proxy in
             ScrollView {
@@ -309,6 +343,10 @@ struct ChatView: View {
             onOpenSettings()
             return
         }
+        guard selectedModel.isAvailable(on: settings.provider) else {
+            onOpenModelPicker()
+            return
+        }
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let imageData = image?.ozoJPEGData(maxDimension: 1200, quality: 0.68)
@@ -332,6 +370,7 @@ struct ChatView: View {
             text: trimmed,
             imageData: imageData,
             modelID: modelID,
+            provider: settings.provider,
             apiKey: apiKey,
             systemPrompt: systemPrompt,
             temperature: temperature
@@ -343,11 +382,16 @@ struct ChatView: View {
             onOpenSettings()
             return
         }
+        guard selectedModel.isAvailable(on: settings.provider) else {
+            onOpenModelPicker()
+            return
+        }
         speech.stop()
         store.send(
             text: prompt,
             imageData: nil,
             modelID: selectedModelID,
+            provider: settings.provider,
             apiKey: settings.apiKey,
             systemPrompt: settings.systemPrompt,
             temperature: settings.temperature
@@ -360,6 +404,7 @@ struct ChatView: View {
             return
         }
         store.regenerate(
+            provider: settings.provider,
             apiKey: settings.apiKey,
             systemPrompt: settings.systemPrompt,
             temperature: settings.temperature

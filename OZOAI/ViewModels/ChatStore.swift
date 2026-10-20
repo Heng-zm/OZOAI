@@ -14,7 +14,7 @@ final class ChatStore: ObservableObject {
     private let storage = ConversationStorage()
     private let persistenceQueue = DispatchQueue(label: "com.ozoai.persistence", qos: .utility)
     private var pendingSave: DispatchWorkItem?
-    private let client = OpenCodeClient.shared
+    private let client = AIClient.shared
     private var streamTask: Task<Void, Never>?
     private var streamToken = UUID()
     private var activeConversationID: UUID?
@@ -203,6 +203,7 @@ final class ChatStore: ObservableObject {
         text: String,
         imageData: Data?,
         modelID: String,
+        provider: AIProvider,
         apiKey: String,
         systemPrompt: String,
         temperature: Double
@@ -213,7 +214,11 @@ final class ChatStore: ObservableObject {
         guard !trimmed.isEmpty || imageData != nil else { return }
         guard !isStreaming else { return }
         guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            errorText = OpenCodeError.missingAPIKey.localizedDescription
+            errorText = AIClientError.missingAPIKey(provider).localizedDescription
+            return
+        }
+        guard let providerModelID = AIModel.model(for: modelID).providerModelID(for: provider) else {
+            errorText = AIClientError.modelUnavailable(provider).localizedDescription
             return
         }
 
@@ -239,6 +244,8 @@ final class ChatStore: ObservableObject {
 
         beginStreaming(
             conversation: conversation,
+            provider: provider,
+            providerModelID: providerModelID,
             apiKey: apiKey,
             systemPrompt: systemPrompt,
             temperature: temperature
@@ -246,6 +253,7 @@ final class ChatStore: ObservableObject {
     }
 
     func regenerate(
+        provider: AIProvider,
         apiKey: String,
         systemPrompt: String,
         temperature: Double
@@ -253,7 +261,12 @@ final class ChatStore: ObservableObject {
         guard !isStreaming, var conversation = currentConversation else { return }
         guard conversation.messages.contains(where: { $0.role == .user }) else { return }
         guard !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            errorText = OpenCodeError.missingAPIKey.localizedDescription
+            errorText = AIClientError.missingAPIKey(provider).localizedDescription
+            return
+        }
+        guard let providerModelID = AIModel.model(for: conversation.modelID)
+            .providerModelID(for: provider) else {
+            errorText = AIClientError.modelUnavailable(provider).localizedDescription
             return
         }
 
@@ -269,6 +282,8 @@ final class ChatStore: ObservableObject {
 
         beginStreaming(
             conversation: conversation,
+            provider: provider,
+            providerModelID: providerModelID,
             apiKey: apiKey,
             systemPrompt: systemPrompt,
             temperature: temperature
@@ -283,6 +298,8 @@ final class ChatStore: ObservableObject {
 
     private func beginStreaming(
         conversation: Conversation,
+        provider: AIProvider,
+        providerModelID: String,
         apiKey: String,
         systemPrompt: String,
         temperature: Double
@@ -298,8 +315,7 @@ final class ChatStore: ObservableObject {
         errorText = nil
 
         let conversationID = conversation.id
-        let modelID = conversation.modelID
-        let supportsVision = AIModel.model(for: modelID).supportsVision
+        let supportsVision = AIModel.model(for: conversation.modelID).supportsVision
         let wireMessages = Self.wireMessages(
             from: conversation,
             systemPrompt: systemPrompt,
@@ -315,8 +331,9 @@ final class ChatStore: ObservableObject {
 
             do {
                 let stream = self.client.streamChat(
+                    provider: provider,
                     apiKey: apiKey,
-                    modelID: modelID,
+                    modelID: providerModelID,
                     messages: wireMessages,
                     temperature: temperature
                 )
