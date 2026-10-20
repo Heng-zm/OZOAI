@@ -10,7 +10,6 @@ struct ChatView: View {
     let onOpenSettings: () -> Void
     let onOpenModelPicker: () -> Void
 
-    @State private var composerResetToken = UUID()
     @State private var lastStreamScrollCount = 0
     @State private var showRenameAlert = false
     @State private var renameText = ""
@@ -33,7 +32,6 @@ struct ChatView: View {
         .background(chatBackground)
         .onChange(of: store.currentID) { _, _ in
             speech.stop()
-            composerResetToken = UUID()
         }
         .onDisappear {
             speech.stop()
@@ -271,7 +269,7 @@ struct ChatView: View {
     private var composerArea: some View {
         VStack(spacing: 0) {
             ComposerView(
-                resetToken: composerResetToken,
+                resetToken: store.composerResetToken,
                 isStreaming: store.isStreaming,
                 model: selectedModel,
                 speech: speech,
@@ -338,8 +336,6 @@ struct ChatView: View {
             systemPrompt: systemPrompt,
             temperature: temperature
         )
-
-        composerResetToken = UUID()
     }
 
     private func sendSuggestion(_ prompt: String) {
@@ -348,7 +344,6 @@ struct ChatView: View {
             return
         }
         speech.stop()
-        composerResetToken = UUID()
         store.send(
             text: prompt,
             imageData: nil,
@@ -374,7 +369,6 @@ struct ChatView: View {
     private func startNewChat() {
         Haptics.tap(settings.hapticsEnabled)
         speech.stop()
-        composerResetToken = UUID()
         withAnimation(.easeOut(duration: 0.2)) {
             store.newChat()
         }

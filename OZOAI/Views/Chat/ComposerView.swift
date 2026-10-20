@@ -21,6 +21,7 @@ struct ComposerView: View {
     @State private var image: UIImage?
     @State private var photoItem: PhotosPickerItem?
     @State private var photoLoadID = UUID()
+    @State private var ignoreTranscription = false
     @State private var showSpeechAlert = false
     @State private var speechPrefix = ""
 
@@ -54,6 +55,7 @@ struct ComposerView: View {
             loadPhoto(newItem)
         }
         .onChange(of: speech.transcript) { _, newTranscript in
+            guard !ignoreTranscription else { return }
             guard speech.isRecording || !newTranscript.isEmpty else { return }
             let prefix = speechPrefix.trimmingCharacters(in: .whitespacesAndNewlines)
             let spoken = newTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -110,6 +112,7 @@ struct ComposerView: View {
                 if speech.isRecording {
                     speech.stop()
                 } else {
+                    ignoreTranscription = false
                     speechPrefix = text
                     Haptics.tap(settings.hapticsEnabled)
                     speech.start()
@@ -304,6 +307,7 @@ struct ComposerView: View {
     private func resetComposer() {
         photoLoadID = UUID()
         photoItem = nil
+        ignoreTranscription = true
         speechPrefix = ""
 
         if speech.isRecording {

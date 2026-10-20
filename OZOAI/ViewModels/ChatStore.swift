@@ -9,6 +9,7 @@ final class ChatStore: ObservableObject {
     @Published private(set) var streamingText: String = ""
     @Published private(set) var isStreaming: Bool = false
     @Published var errorText: String?
+    @Published private(set) var composerResetToken = UUID()
 
     private let storage = ConversationStorage()
     private let persistenceQueue = DispatchQueue(label: "com.ozoai.persistence", qos: .utility)
@@ -120,6 +121,7 @@ final class ChatStore: ObservableObject {
         stop()
         errorText = nil
         currentID = nil
+        composerResetToken = UUID()
         persist()
     }
 
@@ -128,6 +130,7 @@ final class ChatStore: ObservableObject {
         stop()
         currentID = conversation.id
         errorText = nil
+        composerResetToken = UUID()
         persist()
     }
 
@@ -147,6 +150,7 @@ final class ChatStore: ObservableObject {
         }
         if currentID == conversation.id {
             currentID = nil
+            composerResetToken = UUID()
         }
         conversations.removeAll(where: { $0.id == conversation.id })
         persist()
@@ -157,6 +161,7 @@ final class ChatStore: ObservableObject {
         conversations = []
         currentID = nil
         errorText = nil
+        composerResetToken = UUID()
         clearPersistence()
     }
 
@@ -229,6 +234,7 @@ final class ChatStore: ObservableObject {
 
         upsert(conversation)
         currentID = conversation.id
+        composerResetToken = UUID()
         persist()
 
         beginStreaming(
