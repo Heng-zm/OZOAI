@@ -49,16 +49,14 @@ struct ModelPickerView: View {
                     } else {
                         if !availableModels.isEmpty {
                             modelGroup(
-                                title: settings.provider == .openCode
-                                    ? "All models"
-                                    : "Available on \(settings.provider.shortName)",
+                                title: availableGroupTitle,
                                 models: availableModels
                             )
                         }
 
                         if !unavailableModels.isEmpty {
                             modelGroup(
-                                title: "OpenCode Zen only",
+                                title: "Not available on \(settings.provider.shortName)",
                                 models: unavailableModels
                             )
                         }
@@ -122,7 +120,7 @@ struct ModelPickerView: View {
                 Text("\(availableCount)")
                     .font(.system(size: 19, weight: .bold, design: .rounded))
                     .foregroundStyle(providerTint)
-                Text("of 10")
+                Text("of \(AIModel.all.count)")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(.tertiary)
             }
@@ -150,14 +148,28 @@ struct ModelPickerView: View {
     private var providerSummaryText: String {
         switch settings.provider {
         case .openCode:
-            return "All ten models are included and free for a limited time."
+            return "All ten Zen models are included and free for a limited time."
         case .openRouter:
             return "\(availableCount) supported models · \(freeCount) free, \(availableCount - freeCount) use credits."
+        case .anthropic:
+            return "Four Claude models, billed through your Anthropic account."
         }
     }
 
     private var providerTint: Color {
-        settings.provider == .openCode ? OZOTheme.accent : OZOTheme.violet
+        switch settings.provider {
+        case .openCode: return OZOTheme.accent
+        case .openRouter: return OZOTheme.violet
+        case .anthropic: return Color(hex: 0xEA580C)
+        }
+    }
+
+    private var availableGroupTitle: String {
+        switch settings.provider {
+        case .openCode: return "All OpenCode models"
+        case .openRouter: return "Available on OpenRouter"
+        case .anthropic: return "Available on Claude"
+        }
     }
 
     // MARK: - Groups
@@ -294,7 +306,7 @@ struct ModelPickerView: View {
         switch badge {
         case "Free": return .green
         case "Credits": return .orange
-        case "OpenCode only": return .gray
+        case "OpenCode only", "Claude only", "Unavailable": return .gray
         default: return OZOTheme.accent
         }
     }
@@ -342,11 +354,20 @@ struct ModelPickerView: View {
         .padding(.vertical, 38)
     }
 
+    private var footnoteText: String {
+        switch settings.provider {
+        case .openCode:
+            return "All ten Zen models are free on OpenCode Zen. Claude models are Anthropic-only."
+        case .openRouter:
+            return "Free OpenRouter models are marked. Claude models are Anthropic-only."
+        case .anthropic:
+            return "Claude usage is billed by Anthropic. OpenCode and OpenRouter models are unavailable here."
+        }
+    }
+
     private var footnote: some View {
         VStack(spacing: 4) {
-            Text(settings.provider == .openCode
-                 ? "All ten models are free on OpenCode Zen."
-                 : "Free OpenRouter models are marked. Big Pickle and LongCat 2.5 Preview are OpenCode-only.")
+            Text(footnoteText)
                 .font(.system(size: 10.5, weight: .medium))
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)

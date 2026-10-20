@@ -4,6 +4,7 @@ import SwiftUI
 struct RootView: View {
     @StateObject private var store = ChatStore()
     @StateObject private var settings = AppSettings()
+    @StateObject private var auth = AuthService()
     @StateObject private var speech = SpeechRecognizer()
 
     @AppStorage("ozo.onboardingDismissed") private var onboardingDismissed = false
@@ -74,6 +75,7 @@ struct RootView: View {
             SettingsView()
                 .environmentObject(settings)
                 .environmentObject(store)
+                .environmentObject(auth)
         }
         .sheet(isPresented: $showModelPicker) {
             ModelPickerView(selectedID: currentModelID) { model in
@@ -88,14 +90,22 @@ struct RootView: View {
         .onAppear {
             presentOnboardingIfNeeded()
         }
+        .task {
+            await auth.bootstrap()
+        }
         .onChange(of: scenePhase) { _, phase in
-            if phase != .active {
+            if phase == .active {
+                Task { await auth.refreshIfNeeded() }
+            } else {
                 speech.stop()
                 settings.savePreferences()
             }
             if phase == .background {
                 store.flushPersistence()
             }
+        }
+        .onOpenURL { url in
+            Task { _ = await auth.handleCallback(url) }
         }
     }
 

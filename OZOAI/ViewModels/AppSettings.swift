@@ -52,11 +52,13 @@ final class AppSettings: ObservableObject {
     }
     @Published private(set) var openCodeAPIKey: String = ""
     @Published private(set) var openRouterAPIKey: String = ""
+    @Published private(set) var anthropicAPIKey: String = ""
     @Published var systemPrompt: String
     @Published var temperature: Double
     @Published var hapticsEnabled: Bool
     @Published var appearance: Appearance
     @Published var defaultModelID: String
+    @Published var baseURLOverrides: [String: String] = [:]
 
     private let defaults = UserDefaults.standard
 
@@ -70,6 +72,18 @@ final class AppSettings: ObservableObject {
 
         openCodeAPIKey = KeychainStore.readAPIKey(for: .openCode)
         openRouterAPIKey = KeychainStore.readAPIKey(for: .openRouter)
+        anthropicAPIKey = KeychainStore.readAPIKey(for: .anthropic)
+
+        var loadedBaseURLs: [String: String] = [:]
+        if let savedURLs = defaults.dictionary(forKey: "ozo.baseURLs") as? [String: String] {
+            for (rawProvider, value) in savedURLs {
+                guard let savedProvider = AIProvider(rawValue: rawProvider),
+                      (try? savedProvider.endpoint(baseURL: value)) != nil else {
+                    continue
+                }
+                loadedBaseURLs[rawProvider] = value
+            }
+        }
 
         systemPrompt = defaults.object(forKey: "ozo.systemPrompt") as? String
             ?? Self.defaultSystemPrompt
@@ -86,6 +100,9 @@ final class AppSettings: ObservableObject {
 
         let savedModel = defaults.string(forKey: "ozo.defaultModelID") ?? AIModel.defaultID
         defaultModelID = AIModel.all.contains(where: { $0.id == savedModel }) ? savedModel : AIModel.defaultID
+        baseURLOverrides = loadedBaseURLs
+
+        ensureDefaultModelAvailable(for: provider)
     }
 
     var apiKey: String {
@@ -93,6 +110,7 @@ final class AppSettings: ObservableObject {
             switch provider {
             case .openCode: return openCodeAPIKey
             case .openRouter: return openRouterAPIKey
+            case .anthropic: return anthropicAPIKey
             }
         }
         set {
@@ -100,6 +118,7 @@ final class AppSettings: ObservableObject {
             switch provider {
             case .openCode: openCodeAPIKey = trimmed
             case .openRouter: openRouterAPIKey = trimmed
+            case .anthropic: anthropicAPIKey = trimmed
             }
         }
     }
@@ -114,7 +133,37 @@ final class AppSettings: ObservableObject {
             return !openCodeAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         case .openRouter:
             return !openRouterAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .anthropic:
+            return !anthropicAPIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
+    }
+
+    func baseURL(for provider: AIProvider) -> String {
+        baseURLOverrides[provider.rawValue] ?? provider.defaultBaseURLString
+    }
+
+    func isUsingDefaultBaseURL(for provider: AIProvider) -> Bool {
+        baseURLOverrides[provider.rawValue] == nil
+    }
+
+    func resolvedEndpoint(for provider: AIProvider) throws -> URL {
+        try provider.endpoint(baseURL: baseURL(for: provider))
+    }
+
+    func setBaseURL(_ value: String, for provider: AIProvider) throws {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty || trimmed == provider.defaultBaseURLString {
+            baseURLOverrides.removeValue(forKey: provider.rawValue)
+        } else {
+            _ = try provider.endpoint(baseURL: trimmed)
+            baseURLOverrides[provider.rawValue] = trimmed
+        }
+        defaults.set(baseURLOverrides, forKey: "ozo.baseURLs")
+    }
+
+    func resetBaseURL(for provider: AIProvider) {
+        baseURLOverrides.removeValue(forKey: provider.rawValue)
+        defaults.set(baseURLOverrides, forKey: "ozo.baseURLs")
     }
 
     var defaultModel: AIModel {
@@ -128,6 +177,7 @@ final class AppSettings: ObservableObject {
         defaults.set(hapticsEnabled, forKey: "ozo.haptics")
         defaults.set(appearance.rawValue, forKey: "ozo.appearance")
         defaults.set(defaultModelID, forKey: "ozo.defaultModelID")
+        defaults.set(baseURLOverrides, forKey: "ozo.baseURLs")
     }
 
     @discardableResult
@@ -150,6 +200,26 @@ final class AppSettings: ObservableObject {
         guard AIModel.all.contains(where: { $0.id == id }) else { return }
         defaultModelID = id
         defaults.set(id, forKey: "ozo.defaultModelID")
+    }
+
+    /// Keeps new chats usable when the provider changes. The OpenCode/OpenRouter
+    /// default stays GLM; Anthropic falls back to Claude Sonnet.
+    func ensureDefaultModelAvailable(for provider: AIProvider) {
+        guard !defaultModel.isAvailable(on: provider) else { return }
+
+        let preferredID: String
+        switch provider {
+        case .openCode, .openRouter:
+            preferredID = AIModel.defaultID
+        case .anthropic:
+            preferredID = "claude-sonnet-5-5"
+        }
+
+        if AIModel.model(for: preferredID).isAvailable(on: provider) {
+            setDefaultModel(preferredID)
+        } else if let fallback = AIModel.all.first(where: { $0.isAvailable(on: provider) }) {
+            setDefaultModel(fallback.id)
+        }
     }
 
     func resetSystemPrompt() {

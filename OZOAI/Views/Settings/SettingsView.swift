@@ -4,14 +4,19 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var settings: AppSettings
     @EnvironmentObject private var store: ChatStore
+    @EnvironmentObject private var auth: AuthService
     @Environment(\.dismiss) private var dismiss
 
     @State private var apiKeyDraft = ""
+    @State private var baseURLDraft = ""
+    @State private var baseURLMessage: String?
     @State private var showKey = false
     @State private var isTesting = false
     @State private var testResult: TestResult?
     @State private var showClearHistoryConfirmation = false
     @State private var showRemoveKeyConfirmation = false
+    @State private var showAccountSheet = false
+    @State private var showSignOutConfirmation = false
 
     private enum TestResult {
         case success(String)
@@ -25,14 +30,30 @@ struct SettingsView: View {
                     identityCard
 
                     settingsSection(
+                        "Account",
+                        footer: auth.isSignedIn
+                            ? "Your account is optional. Signing out won't delete your chats, API keys, or endpoint settings."
+                            : "An account is optional. You can keep chatting with your own API key without signing in."
+                    ) {
+                        accountCard
+                    }
+
+                    settingsSection(
                         "AI provider",
-                        footer: "OpenCode Zen includes all ten models free. OpenRouter is optional; free and credit-based models are marked in the picker."
+                        footer: "OpenCode Zen includes ten free models. OpenRouter and Anthropic Claude are optional; free and credit-based models are marked in the picker."
                     ) {
                         providerChoices
                     }
 
                     settingsSection("Connection") {
                         connectionCard
+                    }
+
+                    settingsSection(
+                        "API endpoint",
+                        footer: "Use the full API root. OZO adds /chat/completions for OpenCode and OpenRouter, and /v1/messages for Claude. A complete endpoint URL is accepted too."
+                    ) {
+                        endpointCard
                     }
 
                     settingsSection(
@@ -80,6 +101,9 @@ struct SettingsView: View {
                         if apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines) != settings.apiKey {
                             guard saveKey() else { return }
                         }
+                        if baseURLDraft.trimmingCharacters(in: .whitespacesAndNewlines) != settings.baseURL(for: settings.provider) {
+                            guard applyBaseURL(showSuccess: false) else { return }
+                        }
                         settings.savePreferences()
                         dismiss()
                     }
@@ -88,6 +112,7 @@ struct SettingsView: View {
             }
             .onAppear {
                 apiKeyDraft = settings.apiKey
+                baseURLDraft = settings.baseURL(for: settings.provider)
             }
             .onDisappear {
                 settings.savePreferences()
@@ -95,10 +120,36 @@ struct SettingsView: View {
             .onChange(of: apiKeyDraft) { _, _ in
                 testResult = nil
             }
+            .onChange(of: baseURLDraft) { _, _ in
+                baseURLMessage = nil
+                testResult = nil
+            }
             .onChange(of: settings.provider) { _, _ in
                 apiKeyDraft = settings.apiKey
+                baseURLDraft = settings.baseURL(for: settings.provider)
+                baseURLMessage = nil
                 showKey = false
                 testResult = nil
+            }
+            .sheet(isPresented: $showAccountSheet) {
+                AccountView()
+                    .environmentObject(auth)
+                    .environmentObject(settings)
+            }
+            .confirmationDialog(
+                "Sign out of OZO?",
+                isPresented: $showSignOutConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Sign out", role: .destructive) {
+                    Task {
+                        await auth.signOut()
+                        Haptics.success(settings.hapticsEnabled)
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Your chats and API keys stay on this iPhone.")
             }
             .confirmationDialog(
                 "Clear all conversations?",
@@ -145,7 +196,7 @@ struct SettingsView: View {
                     .font(.system(size: 22, weight: .bold, design: .rounded))
                     .tracking(-0.4)
 
-                Text("Ten models, one beautiful chat.")
+                Text("Frontier models, one beautiful chat.")
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
 
@@ -226,10 +277,148 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Account
+
+    private var accountCard: some View {
+        Group {
+            if auth.isSignedIn {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 11) {
+                        ZStack {
+                            Circle()
+                                .fill(OZOTheme.brandGradient)
+                                .frame(width: 40, height: 40)
+
+                            Text(auth.initials)
+                                .font(.system(size: 16, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white)
+                        }
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(auth.accountName)
+                                .font(.system(size: 13.5, weight: .semibold))
+                                .lineLimit(1)
+                            Text(auth.accountEmail)
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+
+                        Spacer(minLength: 4)
+
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(OZOTheme.positive)
+                                .frame(width: 5, height: 5)
+                            Text("Signed in")
+                                .font(.system(size: 9.5, weight: .semibold))
+                                .foregroundStyle(OZOTheme.positive)
+                        }
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3.5)
+                        .background(OZOTheme.positive.opacity(0.10), in: Capsule())
+                    }
+
+                    Divider().opacity(0.55)
+
+                    HStack(spacing: 9) {
+                        Button {
+                            showAccountSheet = true
+                        } label: {
+                            Label("Manage account", systemImage: "person.crop.circle")
+                                .font(.system(size: 12.5, weight: .semibold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(OZOTheme.accent)
+
+                        Button(role: .destructive) {
+                            showSignOutConfirmation = true
+                        } label: {
+                            Label("Sign out", systemImage: "rectangle.portrait.and.arrow.right")
+                                .font(.system(size: 12.5, weight: .semibold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 8)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.red)
+                    }
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 11) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                .fill(OZOTheme.accent.opacity(0.11))
+                                .frame(width: 40, height: 40)
+
+                            Image(systemName: "person.crop.circle.badge.plus")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(OZOTheme.accent)
+                        }
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Sign in to OZO")
+                                .font(.system(size: 13.5, weight: .semibold))
+                            Text("Optional · Email, Google, or Apple/iCloud")
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                        }
+
+                        Spacer(minLength: 0)
+                    }
+
+                    Text("Use your account across OZO. Your API keys and chats stay private on this iPhone.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Button {
+                        showAccountSheet = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 11.5, weight: .semibold))
+                            Text("Sign in or create account")
+                                .font(.system(size: 12.5, weight: .semibold))
+                        }
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                        .background(
+                            OZOTheme.brandGradient,
+                            in: RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        )
+                    }
+                    .buttonStyle(OZOPressStyle())
+
+                    if !auth.config.isConfigured {
+                        HStack(spacing: 5) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 9.5, weight: .semibold))
+                            Text("Account server not configured")
+                                .font(.system(size: 10, weight: .medium))
+                            Spacer(minLength: 4)
+                            Button("Set up") {
+                                showAccountSheet = true
+                            }
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(OZOTheme.accent)
+                        }
+                        .foregroundStyle(.orange)
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - Provider
 
     private var providerChoices: some View {
-        HStack(spacing: 9) {
+        VStack(spacing: 8) {
             ForEach(AIProvider.allCases) { provider in
                 providerChoice(provider)
             }
@@ -238,44 +427,38 @@ struct SettingsView: View {
 
     private func providerChoice(_ provider: AIProvider) -> some View {
         let isSelected = settings.provider == provider
-        let tint = provider == .openCode ? OZOTheme.accent : OZOTheme.violet
+        let tint = providerTint(provider)
         let isConnected = settings.hasAPIKey(for: provider)
 
         return Button {
             selectProvider(provider)
         } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(tint.opacity(0.13))
-                            .frame(width: 32, height: 32)
+            HStack(spacing: 11) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(tint.opacity(0.13))
+                        .frame(width: 34, height: 34)
 
-                        Image(systemName: provider.symbol)
-                            .font(.system(size: 13.5, weight: .semibold))
-                            .foregroundStyle(tint)
-                    }
-
-                    Spacer(minLength: 4)
-
-                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(isSelected ? tint : Color.secondary.opacity(0.22))
+                    Image(systemName: provider.symbol)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(tint)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(provider.displayName)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 13.5, weight: .semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
 
-                    Text(provider == .openCode ? "All 10 models · Free" : "4 free · 4 with credits")
+                    Text(providerDetail(provider))
                         .font(.system(size: 10, weight: .medium))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
+
+                Spacer(minLength: 4)
 
                 HStack(spacing: 4) {
                     Circle()
@@ -286,25 +469,51 @@ struct SettingsView: View {
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(isConnected ? OZOTheme.positive : OZOTheme.warning)
                 }
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3.5)
+                .background(
+                    (isConnected ? OZOTheme.positive : OZOTheme.warning).opacity(0.09),
+                    in: Capsule()
+                )
+
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(isSelected ? tint : Color.secondary.opacity(0.22))
             }
             .padding(11)
-            .frame(maxWidth: .infinity, minHeight: 124, alignment: .topLeading)
+            .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isSelected ? tint.opacity(0.075) : Color.primary.opacity(0.025))
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .fill(isSelected ? tint.opacity(0.07) : Color.primary.opacity(0.025))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
                     .strokeBorder(
-                        isSelected ? tint.opacity(0.34) : OZOTheme.hairline,
+                        isSelected ? tint.opacity(0.30) : OZOTheme.hairline,
                         lineWidth: isSelected ? 1.1 : 0.8
                     )
             )
-            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
         }
         .buttonStyle(OZOPressStyle(scale: 0.985))
         .accessibilityLabel("\(provider.displayName), \(isConnected ? "connected" : "key needed")")
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
+    }
+
+    private func providerTint(_ provider: AIProvider) -> Color {
+        switch provider {
+        case .openCode: return OZOTheme.accent
+        case .openRouter: return OZOTheme.violet
+        case .anthropic: return Color(hex: 0xEA580C)
+        }
+    }
+
+    private func providerDetail(_ provider: AIProvider) -> String {
+        switch provider {
+        case .openCode: return "10 free models"
+        case .openRouter: return "Free + credit models"
+        case .anthropic: return "4 Claude models · Credits"
+        }
     }
 
     private func selectProvider(_ provider: AIProvider) {
@@ -315,6 +524,7 @@ struct SettingsView: View {
         }
 
         settings.provider = provider
+        settings.ensureDefaultModelAvailable(for: provider)
         apiKeyDraft = settings.apiKey
         showKey = false
         testResult = nil
@@ -506,6 +716,135 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Endpoint
+
+    private var endpointCard: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(providerTint(settings.provider).opacity(0.11))
+                        .frame(width: 34, height: 34)
+
+                    Image(systemName: "link")
+                        .font(.system(size: 13.5, weight: .semibold))
+                        .foregroundStyle(providerTint(settings.provider))
+                }
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("\(settings.provider.shortName) API base URL")
+                        .font(.system(size: 13.5, weight: .semibold))
+                    Text("Advanced · requests go only to this server")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                }
+
+                Spacer(minLength: 4)
+
+                Text(settings.isUsingDefaultBaseURL(for: settings.provider) ? "Default" : "Custom")
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .foregroundStyle(settings.isUsingDefaultBaseURL(for: settings.provider) ? .secondary : providerTint(settings.provider))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3.5)
+                    .background(
+                        (settings.isUsingDefaultBaseURL(for: settings.provider) ? Color.secondary : providerTint(settings.provider)).opacity(0.09),
+                        in: Capsule()
+                    )
+            }
+
+            HStack(spacing: 9) {
+                Image(systemName: "network")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.tertiary)
+
+                TextField(settings.provider.defaultBaseURLString, text: $baseURLDraft)
+                    .font(.system(size: 11.5, design: .monospaced))
+                    .keyboardType(.URL)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .textContentType(.URL)
+
+                if !baseURLDraft.isEmpty {
+                    Button {
+                        baseURLDraft = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear base URL")
+                }
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 10)
+            .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .strokeBorder(OZOTheme.hairline, lineWidth: 0.8)
+            )
+
+            resolvedEndpointPreview
+
+            HStack(spacing: 9) {
+                Button {
+                    _ = applyBaseURL(showSuccess: true)
+                } label: {
+                    Label("Apply URL", systemImage: "checkmark.circle.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(providerTint(settings.provider))
+                .disabled(baseURLDraft.trimmingCharacters(in: .whitespacesAndNewlines) == settings.baseURL(for: settings.provider))
+
+                Button {
+                    settings.resetBaseURL(for: settings.provider)
+                    baseURLDraft = settings.baseURL(for: settings.provider)
+                    baseURLMessage = "Using the default endpoint."
+                    Haptics.tap(settings.hapticsEnabled)
+                } label: {
+                    Label("Reset", systemImage: "arrow.counterclockwise")
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                }
+                .buttonStyle(.bordered)
+                .tint(.secondary)
+                .disabled(settings.isUsingDefaultBaseURL(for: settings.provider))
+            }
+
+            if let baseURLMessage {
+                Text(baseURLMessage)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(baseURLMessage.hasPrefix("Using the default") || baseURLMessage.hasPrefix("Endpoint saved") ? OZOTheme.positive : .orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var resolvedEndpointPreview: some View {
+        let candidate = baseURLDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let endpoint = try? settings.provider.endpoint(
+            baseURL: candidate.isEmpty ? settings.provider.defaultBaseURLString : candidate
+        )
+
+        return HStack(alignment: .top, spacing: 6) {
+            Image(systemName: endpoint == nil ? "exclamationmark.triangle.fill" : "arrow.turn.down.right")
+                .font(.system(size: 9.5, weight: .semibold))
+                .foregroundStyle(endpoint == nil ? Color.orange : Color.secondary)
+                .padding(.top, 1)
+
+            Text(endpoint?.absoluteString ?? "Enter a valid HTTP or HTTPS URL.")
+                .font(.system(size: 9.5, design: .monospaced))
+                .foregroundStyle(endpoint == nil ? Color.orange : Color.secondary)
+                .lineLimit(2)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     // MARK: - Model
 
     private var modelCard: some View {
@@ -518,10 +857,13 @@ struct SettingsView: View {
                     } label: {
                         if model.id == settings.defaultModelID {
                             Label(model.name, systemImage: "checkmark")
-                        } else {
+                        } else if model.isAvailable(on: settings.provider) {
                             Text(model.name)
+                        } else {
+                            Text("\(model.name) — unavailable")
                         }
                     }
+                    .disabled(!model.isAvailable(on: settings.provider))
                 }
             } label: {
                 HStack(spacing: 11) {
@@ -570,6 +912,10 @@ struct SettingsView: View {
                 Label(note, systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(.orange)
+            } else {
+                Text("New chats start with this model on \(settings.provider.displayName).")
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.tertiary)
             }
         }
     }
@@ -841,6 +1187,23 @@ struct SettingsView: View {
         return success
     }
 
+    @discardableResult
+    private func applyBaseURL(showSuccess: Bool) -> Bool {
+        do {
+            try settings.setBaseURL(baseURLDraft, for: settings.provider)
+            baseURLDraft = settings.baseURL(for: settings.provider)
+            baseURLMessage = showSuccess ? "Endpoint saved. New requests will use it." : nil
+            if showSuccess {
+                Haptics.success(settings.hapticsEnabled)
+            }
+            return true
+        } catch {
+            baseURLMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            Haptics.error(settings.hapticsEnabled)
+            return false
+        }
+    }
+
     private func testConnection() {
         let key = apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return }
@@ -850,7 +1213,11 @@ struct SettingsView: View {
 
         Task { @MainActor in
             do {
-                try await AIClient.shared.validate(provider: settings.provider, apiKey: key)
+                try await AIClient.shared.validate(
+                    provider: settings.provider,
+                    apiKey: key,
+                    baseURL: baseURLDraft
+                )
                 testResult = .success("Connection works. Save the key to start chatting.")
                 Haptics.success(settings.hapticsEnabled)
             } catch {

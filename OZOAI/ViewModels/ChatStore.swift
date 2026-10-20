@@ -76,7 +76,7 @@ final class ChatStore: ObservableObject {
 
     var exportText: String {
         guard let conversation = currentConversation, !conversation.messages.isEmpty else {
-            return "OZO AI — a chat with ten free AI models."
+            return "OZO AI — a chat with frontier AI models."
         }
 
         // The share link lives in the header, which can be rebuilt while a
@@ -205,6 +205,7 @@ final class ChatStore: ObservableObject {
         modelID: String,
         provider: AIProvider,
         apiKey: String,
+        baseURL: String,
         systemPrompt: String,
         temperature: Double
     ) {
@@ -247,6 +248,7 @@ final class ChatStore: ObservableObject {
             provider: provider,
             providerModelID: providerModelID,
             apiKey: apiKey,
+            baseURL: baseURL,
             systemPrompt: systemPrompt,
             temperature: temperature
         )
@@ -255,6 +257,7 @@ final class ChatStore: ObservableObject {
     func regenerate(
         provider: AIProvider,
         apiKey: String,
+        baseURL: String,
         systemPrompt: String,
         temperature: Double
     ) {
@@ -285,6 +288,7 @@ final class ChatStore: ObservableObject {
             provider: provider,
             providerModelID: providerModelID,
             apiKey: apiKey,
+            baseURL: baseURL,
             systemPrompt: systemPrompt,
             temperature: temperature
         )
@@ -301,6 +305,7 @@ final class ChatStore: ObservableObject {
         provider: AIProvider,
         providerModelID: String,
         apiKey: String,
+        baseURL: String,
         systemPrompt: String,
         temperature: Double
     ) {
@@ -334,6 +339,7 @@ final class ChatStore: ObservableObject {
                     provider: provider,
                     apiKey: apiKey,
                     modelID: providerModelID,
+                    baseURL: baseURL,
                     messages: wireMessages,
                     temperature: temperature
                 )

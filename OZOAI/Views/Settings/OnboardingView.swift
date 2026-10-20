@@ -133,13 +133,13 @@ struct OnboardingView: View {
                     .tracking(-1.3)
                     .foregroundStyle(.white)
 
-                Text("Ten powerful models. One beautiful chat.")
+                Text("Claude, Zen, and more. One beautiful chat.")
                     .font(.system(size: 14.5))
                     .foregroundStyle(.white.opacity(0.58))
                     .multilineTextAlignment(.center)
 
                 HStack(spacing: 6) {
-                    tag("10 models", color: Color(hex: 0x2DD4BF))
+                    tag("\(AIModel.all.count) models", color: Color(hex: 0x2DD4BF))
                     tag("Vision", color: Color(hex: 0x8B5CF6))
                     tag("Voice", color: Color(hex: 0x60A5FA))
                 }
@@ -177,13 +177,13 @@ struct OnboardingView: View {
 
                 Spacer(minLength: 4)
 
-                Text(settings.provider == .openCode ? "FREE" : "OPTIONAL")
+                Text(providerTag(settings.provider))
                     .font(.system(size: 8.5, weight: .bold, design: .rounded))
                     .tracking(0.6)
-                    .foregroundStyle(Color(hex: 0x2DD4BF))
+                    .foregroundStyle(providerTint(settings.provider))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
-                    .background(Color(hex: 0x14B8A6).opacity(0.13), in: Capsule())
+                    .background(providerTint(settings.provider).opacity(0.13), in: Capsule())
             }
 
             HStack(spacing: 3) {
@@ -198,9 +198,7 @@ struct OnboardingView: View {
                     .strokeBorder(Color.white.opacity(0.07), lineWidth: 0.7)
             )
 
-            Text(settings.provider == .openCode
-                 ? "Paste your OpenCode key to unlock all ten models. It's stored securely on this iPhone."
-                 : "Paste your OpenRouter key to use supported models. Free models are marked in the picker.")
+            Text(providerDescription(settings.provider))
                 .font(.system(size: 11.5))
                 .foregroundStyle(.white.opacity(0.53))
                 .fixedSize(horizontal: false, vertical: true)
@@ -294,12 +292,12 @@ struct OnboardingView: View {
 
             Link(destination: settings.provider.consoleURL) {
                 HStack(spacing: 3) {
-                    Text(settings.provider == .openCode ? "Get your free API key" : "Get your OpenRouter key")
+                    Text(settings.provider.consoleLinkTitle)
                     Image(systemName: "arrow.up.right")
                         .font(.system(size: 7.5, weight: .bold))
                 }
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color(hex: 0x2DD4BF))
+                .foregroundStyle(providerTint(settings.provider))
                 .frame(maxWidth: .infinity)
             }
         }
@@ -321,12 +319,40 @@ struct OnboardingView: View {
         !keyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private func providerTint(_ provider: AIProvider) -> Color {
+        switch provider {
+        case .openCode: return Color(hex: 0x2DD4BF)
+        case .openRouter: return Color(hex: 0x8B5CF6)
+        case .anthropic: return Color(hex: 0xF97316)
+        }
+    }
+
+    private func providerTag(_ provider: AIProvider) -> String {
+        switch provider {
+        case .openCode: return "FREE"
+        case .openRouter: return "OPTIONAL"
+        case .anthropic: return "CREDITS"
+        }
+    }
+
+    private func providerDescription(_ provider: AIProvider) -> String {
+        switch provider {
+        case .openCode:
+            return "Paste your OpenCode key to unlock all ten free models. It's stored securely on this iPhone."
+        case .openRouter:
+            return "Paste your OpenRouter key to use supported models. Free models are marked in the picker."
+        case .anthropic:
+            return "Paste your Anthropic key to chat with Claude. Usage is billed through your Anthropic account."
+        }
+    }
+
     private func providerButton(_ provider: AIProvider) -> some View {
         let isSelected = settings.provider == provider
 
         return Button {
             guard provider != settings.provider else { return }
             settings.provider = provider
+            settings.ensureDefaultModelAvailable(for: provider)
             keyDraft = settings.apiKey
             saveError = nil
             showKey = false
@@ -335,12 +361,12 @@ struct OnboardingView: View {
             HStack(spacing: 5) {
                 Image(systemName: provider.symbol)
                     .font(.system(size: 10.5, weight: .semibold))
-                Text(provider.displayName)
-                    .font(.system(size: 11.5, weight: .semibold))
+                Text(provider.shortName)
+                    .font(.system(size: 10.5, weight: .semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
-            .foregroundStyle(isSelected ? .white : .white.opacity(0.50))
+            .foregroundStyle(isSelected ? Color.white : Color.white.opacity(0.50))
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
             .background(
@@ -379,8 +405,8 @@ struct OnboardingView: View {
             featureChip(
                 icon: "square.stack.3d.up.fill",
                 tint: Color(hex: 0x2DD4BF),
-                title: "10 models",
-                detail: "All in one"
+                title: "\(AIModel.all.count) models",
+                detail: "Claude + Zen"
             )
             featureChip(
                 icon: "eye.fill",

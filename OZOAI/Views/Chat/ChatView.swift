@@ -487,6 +487,7 @@ struct ChatView: View {
             modelID: modelID,
             provider: settings.provider,
             apiKey: apiKey,
+            baseURL: settings.baseURL(for: settings.provider),
             systemPrompt: systemPrompt,
             temperature: temperature
         )
@@ -508,6 +509,7 @@ struct ChatView: View {
             modelID: selectedModelID,
             provider: settings.provider,
             apiKey: settings.apiKey,
+            baseURL: settings.baseURL(for: settings.provider),
             systemPrompt: settings.systemPrompt,
             temperature: settings.temperature
         )
@@ -521,6 +523,7 @@ struct ChatView: View {
         store.regenerate(
             provider: settings.provider,
             apiKey: settings.apiKey,
+            baseURL: settings.baseURL(for: settings.provider),
             systemPrompt: settings.systemPrompt,
             temperature: settings.temperature
         )

@@ -1,6 +1,6 @@
 import Foundation
 
-// MARK: - Wire types
+// MARK: - Shared wire types
 
 struct WireMessage: Encodable {
     let role: String
@@ -40,6 +40,8 @@ struct WirePart: Encodable {
     }
 }
 
+// MARK: - OpenAI-compatible wire types
+
 private struct ChatRequest: Encodable {
     let model: String
     let messages: [WireMessage]
@@ -63,6 +65,72 @@ private struct StreamEnvelope: Decodable {
     }
 
     let choices: [Choice]?
+    let error: APIError?
+}
+
+// MARK: - Anthropic wire types
+
+private struct AnthropicRequest: Encodable {
+    let model: String
+    let max_tokens: Int
+    let messages: [AnthropicMessage]
+    let system: String?
+    let stream: Bool
+    let temperature: Double
+}
+
+private struct AnthropicMessage: Encodable {
+    let role: String
+    let content: [AnthropicBlock]
+}
+
+private enum AnthropicBlock: Encodable {
+    case text(String)
+    case image(mediaType: String, base64: String)
+
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case text
+        case source
+    }
+
+    private enum SourceCodingKeys: String, CodingKey {
+        case type
+        case mediaType = "media_type"
+        case data
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+
+        switch self {
+        case .text(let value):
+            try container.encode("text", forKey: .type)
+            try container.encode(value, forKey: .text)
+
+        case .image(let mediaType, let base64):
+            try container.encode("image", forKey: .type)
+            var source = container.nestedContainer(keyedBy: SourceCodingKeys.self, forKey: .source)
+            try source.encode("base64", forKey: .type)
+            try source.encode(mediaType, forKey: .mediaType)
+            try source.encode(base64, forKey: .data)
+        }
+    }
+}
+
+private struct AnthropicStreamEnvelope: Decodable {
+    struct Delta: Decodable {
+        let type: String?
+        let text: String?
+    }
+
+    struct APIError: Decodable {
+        let type: String?
+        let message: String?
+    }
+
+    let type: String?
+    let delta: Delta?
     let error: APIError?
 }
 
@@ -91,7 +159,7 @@ enum AIClientError: LocalizedError {
             case 401:
                 return "That \(provider.shortName) API key wasn't accepted. Update it in Settings."
             case 402:
-                return "This model needs credits on \(provider.displayName). Pick a free model or add credits, then try again."
+                return "This model needs credits on \(provider.displayName). Pick another model or add credits, then try again."
             case 403:
                 return "Access was denied. Check your API key and that this model is available in your region."
             case 404:
@@ -126,12 +194,43 @@ final class AIClient {
         session = URLSession(configuration: configuration)
     }
 
-    /// Streams an OpenAI-compatible server-sent-events response from either
-    /// OpenCode Zen or OpenRouter.
+    /// Streams a response from the selected provider. OpenAI-compatible
+    /// providers use SSE chat completions; Claude uses the Messages API.
     func streamChat(
         provider: AIProvider,
         apiKey: String,
         modelID: String,
+        baseURL: String,
+        messages: [WireMessage],
+        temperature: Double
+    ) -> AsyncThrowingStream<String, Error> {
+        if provider == .anthropic {
+            return streamAnthropic(
+                provider: provider,
+                apiKey: apiKey,
+                modelID: modelID,
+                baseURL: baseURL,
+                messages: messages,
+                temperature: temperature
+            )
+        }
+        return streamOpenAI(
+            provider: provider,
+            apiKey: apiKey,
+            modelID: modelID,
+            baseURL: baseURL,
+            messages: messages,
+            temperature: temperature
+        )
+    }
+
+    // MARK: - OpenAI-compatible streaming
+
+    private func streamOpenAI(
+        provider: AIProvider,
+        apiKey: String,
+        modelID: String,
+        baseURL: String,
         messages: [WireMessage],
         temperature: Double
     ) -> AsyncThrowingStream<String, Error> {
@@ -147,9 +246,10 @@ final class AIClient {
                         temperature: temperature,
                         max_tokens: nil
                     )
-                    let request = try makeRequest(
+                    let request = try makeOpenAIRequest(
                         provider: provider,
                         apiKey: apiKey,
+                        baseURL: baseURL,
                         body: body,
                         accept: "text/event-stream",
                         timeout: 300
@@ -241,32 +341,181 @@ final class AIClient {
         }
     }
 
-    /// Sends a tiny request to verify that an API key works.
-    func validate(provider: AIProvider, apiKey: String) async throws {
-        let modelID: String
-        switch provider {
-        case .openCode:
-            modelID = AIModel.defaultID
-        case .openRouter:
-            // Use one of OpenRouter's free models so validation does not
-            // require credits on the account.
-            modelID = "nvidia/nemotron-3.5-lightning:free"
-        }
+    // MARK: - Anthropic streaming
 
-        let body = ChatRequest(
-            model: modelID,
-            messages: [WireMessage(role: "user", content: .text("Reply with OK."))],
-            stream: false,
-            temperature: 0.2,
-            max_tokens: 4
-        )
-        let request = try makeRequest(
-            provider: provider,
-            apiKey: apiKey,
-            body: body,
-            accept: "application/json",
-            timeout: 45
-        )
+    private func streamAnthropic(
+        provider: AIProvider,
+        apiKey: String,
+        modelID: String,
+        baseURL: String,
+        messages: [WireMessage],
+        temperature: Double
+    ) -> AsyncThrowingStream<String, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                var receivedContent = false
+
+                do {
+                    let payload = Self.anthropicPayload(from: messages)
+                    guard !payload.messages.isEmpty else {
+                        throw AIClientError.invalidResponse
+                    }
+
+                    let body = AnthropicRequest(
+                        model: modelID,
+                        max_tokens: 8_192,
+                        messages: payload.messages,
+                        system: payload.system,
+                        stream: true,
+                        temperature: temperature
+                    )
+                    let request = try makeAnthropicRequest(
+                        apiKey: apiKey,
+                        baseURL: baseURL,
+                        body: body,
+                        accept: "text/event-stream",
+                        timeout: 300
+                    )
+
+                    let (bytes, response) = try await session.bytes(for: request)
+
+                    guard let http = response as? HTTPURLResponse else {
+                        throw AIClientError.invalidResponse
+                    }
+
+                    guard (200..<300).contains(http.statusCode) else {
+                        var errorBody = ""
+                        for try await line in bytes.lines {
+                            errorBody += line
+                            if errorBody.count > 2_000 { break }
+                        }
+                        throw AIClientError.http(
+                            provider: provider,
+                            status: http.statusCode,
+                            message: Self.serverMessage(from: errorBody)
+                        )
+                    }
+
+                    let decoder = JSONDecoder()
+
+                    for try await line in bytes.lines {
+                        if Task.isCancelled { break }
+
+                        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard trimmed.hasPrefix("data:") else { continue }
+
+                        var dataString = String(trimmed.dropFirst(5))
+                        if dataString.hasPrefix(" ") { dataString.removeFirst() }
+                        if dataString.isEmpty { continue }
+
+                        guard let data = dataString.data(using: .utf8),
+                              let envelope = try? decoder.decode(AnthropicStreamEnvelope.self, from: data) else {
+                            continue
+                        }
+
+                        if let message = envelope.error?.message, !message.isEmpty {
+                            throw AIClientError.http(
+                                provider: provider,
+                                status: 200,
+                                message: message
+                            )
+                        }
+
+                        if envelope.type == "content_block_delta",
+                           envelope.delta?.type == "text_delta",
+                           let piece = envelope.delta?.text,
+                           !piece.isEmpty {
+                            receivedContent = true
+                            continuation.yield(piece)
+                        }
+
+                        if envelope.type == "message_stop" {
+                            break
+                        }
+                    }
+
+                    if Task.isCancelled {
+                        continuation.finish()
+                        return
+                    }
+                    if !receivedContent {
+                        throw AIClientError.emptyResponse
+                    }
+                    continuation.finish()
+                } catch is CancellationError {
+                    continuation.finish()
+                } catch let error as URLError where error.code == .cancelled {
+                    continuation.finish()
+                } catch let error as URLError {
+                    continuation.finish(
+                        throwing: AIClientError.network(provider, Self.message(for: error, provider: provider))
+                    )
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
+    }
+
+    // MARK: - Validation
+
+    /// Sends a tiny request to verify that an API key and endpoint work.
+    func validate(provider: AIProvider, apiKey: String, baseURL: String) async throws {
+        let request: URLRequest
+
+        switch provider {
+        case .openCode, .openRouter:
+            let modelID: String
+            if provider == .openCode {
+                modelID = AIModel.defaultID
+            } else {
+                // Use one of OpenRouter's free models so validation does not
+                // require credits on the account.
+                modelID = "nvidia/nemotron-3.5-lightning:free"
+            }
+
+            let body = ChatRequest(
+                model: modelID,
+                messages: [WireMessage(role: "user", content: .text("Reply with OK."))],
+                stream: false,
+                temperature: 0.2,
+                max_tokens: 4
+            )
+            request = try makeOpenAIRequest(
+                provider: provider,
+                apiKey: apiKey,
+                baseURL: baseURL,
+                body: body,
+                accept: "application/json",
+                timeout: 45
+            )
+
+        case .anthropic:
+            let body = AnthropicRequest(
+                model: "claude-haiku-5-5",
+                max_tokens: 8,
+                messages: [
+                    AnthropicMessage(
+                        role: "user",
+                        content: [.text("Reply with OK.")]
+                    )
+                ],
+                system: nil,
+                stream: false,
+                temperature: 0.2
+            )
+            request = try makeAnthropicRequest(
+                apiKey: apiKey,
+                baseURL: baseURL,
+                body: body,
+                accept: "application/json",
+                timeout: 45
+            )
+        }
 
         do {
             let (data, response) = try await session.data(for: request)
@@ -286,11 +535,12 @@ final class AIClient {
         }
     }
 
-    // MARK: - Helpers
+    // MARK: - Requests
 
-    private func makeRequest(
+    private func makeOpenAIRequest(
         provider: AIProvider,
         apiKey: String,
+        baseURL: String,
         body: ChatRequest,
         accept: String,
         timeout: TimeInterval
@@ -298,7 +548,7 @@ final class AIClient {
         let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { throw AIClientError.missingAPIKey(provider) }
 
-        var request = URLRequest(url: provider.endpoint)
+        var request = URLRequest(url: try provider.endpoint(baseURL: baseURL))
         request.httpMethod = "POST"
         request.timeoutInterval = timeout
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
@@ -314,6 +564,107 @@ final class AIClient {
         request.httpBody = try JSONEncoder().encode(body)
         return request
     }
+
+    private func makeAnthropicRequest(
+        apiKey: String,
+        baseURL: String,
+        body: AnthropicRequest,
+        accept: String,
+        timeout: TimeInterval
+    ) throws -> URLRequest {
+        let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { throw AIClientError.missingAPIKey(.anthropic) }
+
+        var request = URLRequest(url: try AIProvider.anthropic.endpoint(baseURL: baseURL))
+        request.httpMethod = "POST"
+        request.timeoutInterval = timeout
+        request.setValue(key, forHTTPHeaderField: "x-api-key")
+        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(accept, forHTTPHeaderField: "Accept")
+        request.setValue("OZO-AI-iOS/1.0", forHTTPHeaderField: "User-Agent")
+        request.httpBody = try JSONEncoder().encode(body)
+        return request
+    }
+
+    // MARK: - Anthropic conversion
+
+    private static func anthropicPayload(
+        from messages: [WireMessage]
+    ) -> (system: String?, messages: [AnthropicMessage]) {
+        var systemParts: [String] = []
+        var result: [AnthropicMessage] = []
+
+        for message in messages {
+            if message.role == "system" {
+                systemParts.append(contentsOf: textParts(from: message.content))
+                continue
+            }
+
+            var blocks: [AnthropicBlock] = []
+            switch message.content {
+            case .text(let text):
+                if !text.isEmpty {
+                    blocks.append(.text(text))
+                }
+            case .parts(let parts):
+                for part in parts {
+                    if let text = part.text, !text.isEmpty {
+                        blocks.append(.text(text))
+                    } else if let image = part.image_url,
+                              let block = anthropicImageBlock(from: image.url) {
+                        blocks.append(block)
+                    }
+                }
+            }
+
+            if !blocks.isEmpty {
+                result.append(
+                    AnthropicMessage(
+                        role: message.role == "assistant" ? "assistant" : "user",
+                        content: blocks
+                    )
+                )
+            }
+        }
+
+        let system = systemParts
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .joined(separator: "\n\n")
+
+        return (system.isEmpty ? nil : system, result)
+    }
+
+    private static func textParts(from content: WireContent) -> [String] {
+        switch content {
+        case .text(let text):
+            return text.isEmpty ? [] : [text]
+        case .parts(let parts):
+            return parts.compactMap { $0.text }.filter { !$0.isEmpty }
+        }
+    }
+
+    private static func anthropicImageBlock(from dataURL: String) -> AnthropicBlock? {
+        guard dataURL.hasPrefix("data:"),
+              let comma = dataURL.firstIndex(of: ",") else {
+            return nil
+        }
+
+        let headerStart = dataURL.index(dataURL.startIndex, offsetBy: 5)
+        let header = String(dataURL[headerStart..<comma])
+        guard header.hasSuffix(";base64") else { return nil }
+
+        let mediaType = String(header.dropLast(";base64".count))
+        let base64 = String(dataURL[dataURL.index(after: comma)...])
+        guard !base64.isEmpty else { return nil }
+
+        return .image(
+            mediaType: mediaType.isEmpty ? "image/jpeg" : mediaType,
+            base64: base64
+        )
+    }
+
+    // MARK: - Helpers
 
     private static func serverMessage(from raw: String) -> String {
         let cleaned = raw.trimmingCharacters(in: .whitespacesAndNewlines)

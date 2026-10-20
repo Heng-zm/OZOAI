@@ -128,6 +128,50 @@ struct AIModel: Identifiable, Hashable {
             tintHex: 0x14B8A6,
             supportsVision: false,
             badges: ["Flagship", "Reasoning"]
+        ),
+        AIModel(
+            id: "claude-fable-5-1",
+            name: "Claude Fable 5.1",
+            shortName: "Claude Fable 5.1",
+            vendor: "Anthropic",
+            tagline: "Frontier reasoning for ambitious, long-running work.",
+            symbol: "wand.and.stars",
+            tintHex: 0xD97706,
+            supportsVision: true,
+            badges: ["Frontier", "Reasoning"]
+        ),
+        AIModel(
+            id: "claude-opus-5-5",
+            name: "Claude Opus 5.5",
+            shortName: "Claude Opus 5.5",
+            vendor: "Anthropic",
+            tagline: "Deep intelligence for coding, research and hard problems.",
+            symbol: "crown.fill",
+            tintHex: 0x9333EA,
+            supportsVision: true,
+            badges: ["Flagship", "Code"]
+        ),
+        AIModel(
+            id: "claude-sonnet-5-5",
+            name: "Claude Sonnet 5.5",
+            shortName: "Claude Sonnet 5.5",
+            vendor: "Anthropic",
+            tagline: "The best balance of speed and intelligence for everyday work.",
+            symbol: "sparkle",
+            tintHex: 0xEA580C,
+            supportsVision: true,
+            badges: ["Best value", "Vision"]
+        ),
+        AIModel(
+            id: "claude-haiku-5-5",
+            name: "Claude Haiku 5.5",
+            shortName: "Claude Haiku 5.5",
+            vendor: "Anthropic",
+            tagline: "Fastest Claude for quick answers and high-volume tasks.",
+            symbol: "wind",
+            tintHex: 0x0891B2,
+            supportsVision: true,
+            badges: ["Fastest", "Vision"]
         )
     ]
 

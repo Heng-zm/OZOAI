@@ -94,7 +94,7 @@ struct WelcomeView: View {
                     .tracking(-0.9)
                     .multilineTextAlignment(.center)
 
-                Text("Ask anything. Ten models, one chat.")
+                Text("Ask anything. Claude, Zen, and more.")
                     .font(.system(size: 14.5))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -167,9 +167,7 @@ struct WelcomeView: View {
                             .font(.system(size: 14.5, weight: .semibold))
                             .foregroundStyle(.primary)
 
-                        Text(settings.provider == .openCode
-                             ? "Add your free key to unlock all 10 models."
-                             : "Add your OpenRouter key to get started.")
+                        Text(connectDescription)
                             .font(.system(size: 11.5))
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.leading)
@@ -304,9 +302,7 @@ struct WelcomeView: View {
             .font(.system(size: 9.5, weight: .medium))
             .foregroundStyle(.tertiary)
 
-            Text(settings.provider == .openCode
-                 ? "All 10 included models are free for a limited time"
-                 : "Free OpenRouter models are marked in the picker")
+            Text(footerNote)
                 .font(.system(size: 9.5, weight: .medium))
                 .foregroundStyle(.quaternary)
         }
@@ -314,11 +310,33 @@ struct WelcomeView: View {
         .padding(.bottom, 16)
     }
 
+    private var connectDescription: String {
+        switch settings.provider {
+        case .openCode:
+            return "Add your free key to unlock all 10 models."
+        case .openRouter:
+            return "Add your OpenRouter key to get started."
+        case .anthropic:
+            return "Add your Anthropic key to chat with Claude."
+        }
+    }
+
+    private var footerNote: String {
+        switch settings.provider {
+        case .openCode:
+            return "All 10 included models are free for a limited time"
+        case .openRouter:
+            return "Free OpenRouter models are marked in the picker"
+        case .anthropic:
+            return "Claude usage is billed through your Anthropic account"
+        }
+    }
+
     private func badgeTint(for badge: String) -> Color {
         switch badge {
         case "Free": return .green
         case "Credits": return .orange
-        case "OpenCode only": return .gray
+        case "OpenCode only", "Claude only", "Unavailable": return .gray
         default: return OZOTheme.accent
         }
     }
