@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+
+# Xcode
+OZOAI.xcodeproj/
+build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# Build output
+*.ipa
+*.dSYM
+Payload/
+xcodebuild.log
+
+# Secrets
+.env
+*.p12
+*.mobileprovision
+
+# Local
+.idea/
+.vscode/

@@ -1,0 +1,102 @@
+name: Build OZO AI IPA
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build unsigned iOS app
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build app
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project OZOAI.xcodeproj \
+            -scheme OZOAI \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$PWD/build" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            build | tee xcodebuild.log
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP_PATH="$(find build/Build/Products/Release-iphoneos -maxdepth 1 -name 'OZOAI.app' -print -quit)"
+          if [ -z "$APP_PATH" ]; then
+            echo "::error::OZOAI.app was not produced by the build."
+            exit 1
+          fi
+          rm -rf Payload OZOAI-unsigned.ipa
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/OZOAI.app
+          zip -qry OZOAI-unsigned.ipa Payload
+          shasum -a 256 OZOAI-unsigned.ipa | tee OZOAI-unsigned.ipa.sha256
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OZOAI-unsigned-ipa
+          path: |
+            OZOAI-unsigned.ipa
+            OZOAI-unsigned.ipa.sha256
+          retention-days: 30
+
+      - name: Write build summary
+        run: |
+          IPA_SIZE="$(du -h OZOAI-unsigned.ipa | cut -f1)"
+          SHA="$(cut -d' ' -f1 OZOAI-unsigned.ipa.sha256)"
+          {
+            echo "## OZO AI IPA is ready"
+            echo ""
+            echo "- **Artifact:** \`OZOAI-unsigned-ipa\`"
+            echo "- **IPA size:** ${IPA_SIZE}"
+            echo "- **SHA-256:** \`${SHA}\`"
+            echo ""
+            echo "Download the artifact, unzip it, and sign \`OZOAI-unsigned.ipa\` with Sideloadly using your Apple ID."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Attach IPA to GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            OZOAI-unsigned.ipa
+            OZOAI-unsigned.ipa.sha256
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: xcodebuild.log
+          retention-days: 7
+          if-no-files-found: ignore
