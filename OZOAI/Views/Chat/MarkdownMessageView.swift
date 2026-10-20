@@ -249,15 +249,75 @@ enum OZOMarkdownParser {
 
 // MARK: - Rendered message
 
+private enum MarkdownRenderBlock {
+    case heading(level: Int, text: AttributedString)
+    case paragraph(AttributedString)
+    case bullets([AttributedString])
+    case numbers([AttributedString])
+    case quote(AttributedString)
+    case code(language: String?, code: String)
+    case table([[AttributedString]])
+    case divider
+}
+
+/// Caches the parsed and styled blocks for a message. Completed messages are
+/// rendered repeatedly as the chat scrolls, so parsing them each time is pure
+/// overhead. Only the growing streaming message changes its key.
+private final class MarkdownRenderCache {
+    private var cachedText: String?
+    private var cachedBlocks: [MarkdownRenderBlock] = []
+
+    func blocks(for text: String) -> [MarkdownRenderBlock] {
+        if cachedText == text {
+            return cachedBlocks
+        }
+
+        let rendered = Self.render(text)
+        cachedText = text
+        cachedBlocks = rendered
+        return rendered
+    }
+
+    private static func render(_ text: String) -> [MarkdownRenderBlock] {
+        OZOMarkdownParser.parse(text).map { block -> MarkdownRenderBlock in
+            switch block {
+            case .heading(let level, let text):
+                return .heading(level: level, text: OZOMarkdownParser.inline(text))
+            case .paragraph(let text):
+                return .paragraph(OZOMarkdownParser.inline(text))
+            case .bullets(let items):
+                return .bullets(items.map { OZOMarkdownParser.inline($0) })
+            case .numbers(let items):
+                return .numbers(items.map { OZOMarkdownParser.inline($0) })
+            case .quote(let text):
+                return .quote(OZOMarkdownParser.inline(text))
+            case .code(let language, let code):
+                return .code(language: language, code: code)
+            case .table(let rows):
+                return .table(rows.map { row in
+                    row.map { OZOMarkdownParser.inline($0) }
+                })
+            case .divider:
+                return .divider
+            }
+        }
+    }
+}
+
 struct MarkdownMessageView: View {
     let text: String
-    var isStreaming: Bool = false
+    let isStreaming: Bool
 
-    private var blocks: [MarkdownBlock] {
-        OZOMarkdownParser.parse(text)
+    @State private var cache = MarkdownRenderCache()
+
+    init(text: String, isStreaming: Bool = false) {
+        self.text = text
+        self.isStreaming = isStreaming
     }
 
     var body: some View {
+        let blocks = cache.blocks(for: text)
+
         VStack(alignment: .leading, spacing: 10) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 blockView(block)
@@ -272,10 +332,10 @@ struct MarkdownMessageView: View {
     }
 
     @ViewBuilder
-    private func blockView(_ block: MarkdownBlock) -> some View {
+    private func blockView(_ block: MarkdownRenderBlock) -> some View {
         switch block {
         case .heading(let level, let text):
-            Text(OZOMarkdownParser.inline(text))
+            Text(text)
                 .font(headingFont(level))
                 .lineSpacing(2)
                 .padding(.top, 2)
@@ -283,7 +343,7 @@ struct MarkdownMessageView: View {
                 .textSelection(.enabled)
 
         case .paragraph(let text):
-            Text(OZOMarkdownParser.inline(text))
+            Text(text)
                 .font(.system(size: 16))
                 .lineSpacing(4.5)
                 .fixedSize(horizontal: false, vertical: true)
@@ -297,7 +357,7 @@ struct MarkdownMessageView: View {
                             .fill(OZOTheme.accent)
                             .frame(width: 5, height: 5)
                             .offset(y: -2)
-                        Text(OZOMarkdownParser.inline(item))
+                        Text(item)
                             .font(.system(size: 16))
                             .lineSpacing(4)
                             .fixedSize(horizontal: false, vertical: true)
@@ -314,7 +374,7 @@ struct MarkdownMessageView: View {
                             .font(.system(size: 14, weight: .semibold, design: .rounded))
                             .foregroundStyle(.secondary)
                             .frame(minWidth: 18, alignment: .trailing)
-                        Text(OZOMarkdownParser.inline(item))
+                        Text(item)
                             .font(.system(size: 16))
                             .lineSpacing(4)
                             .fixedSize(horizontal: false, vertical: true)
@@ -328,7 +388,7 @@ struct MarkdownMessageView: View {
                 RoundedRectangle(cornerRadius: 2, style: .continuous)
                     .fill(OZOTheme.accent.opacity(0.55))
                     .frame(width: 3)
-                Text(OZOMarkdownParser.inline(text))
+                Text(text)
                     .font(.system(size: 15))
                     .foregroundStyle(.secondary)
                     .italic()
@@ -433,7 +493,7 @@ struct MarkdownCodeBlock: View {
 // MARK: - Table
 
 struct MarkdownTableView: View {
-    let rows: [[String]]
+    let rows: [[AttributedString]]
 
     private let cellWidth: CGFloat = 148
 
@@ -443,7 +503,7 @@ struct MarkdownTableView: View {
                 ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
                     HStack(alignment: .top, spacing: 0) {
                         ForEach(Array(row.enumerated()), id: \.offset) { cellIndex, cell in
-                            Text(OZOMarkdownParser.inline(cell))
+                            Text(cell)
                                 .font(.system(size: 13, weight: rowIndex == 0 ? .semibold : .regular))
                                 .lineSpacing(2)
                                 .fixedSize(horizontal: false, vertical: true)

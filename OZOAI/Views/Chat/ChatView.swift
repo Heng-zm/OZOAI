@@ -10,7 +10,8 @@ struct ChatView: View {
     let onOpenSettings: () -> Void
     let onOpenModelPicker: () -> Void
 
-    @State private var pendingImage: UIImage?
+    @State private var composerResetToken = UUID()
+    @State private var lastStreamScrollCount = 0
     @State private var showRenameAlert = false
     @State private var renameText = ""
     @State private var showClearConfirmation = false
@@ -31,8 +32,8 @@ struct ChatView: View {
         }
         .background(chatBackground)
         .onChange(of: store.currentID) { _, _ in
-            pendingImage = nil
             speech.stop()
+            composerResetToken = UUID()
         }
         .onDisappear {
             speech.stop()
@@ -192,6 +193,7 @@ struct ChatView: View {
                                     && message.id == store.messages.last?.id,
                                 onRegenerate: regenerate
                             )
+                            .equatable()
                             .id(message.id)
                         }
 
@@ -221,17 +223,33 @@ struct ChatView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: store.messages.count) { _, _ in
+                lastStreamScrollCount = 0
                 DispatchQueue.main.async {
                     scrollToBottom(proxy, animated: true)
                 }
             }
             .onChange(of: store.currentID) { _, _ in
+                lastStreamScrollCount = 0
                 DispatchQueue.main.async {
                     scrollToBottom(proxy, animated: false)
                 }
             }
-            .onChange(of: store.streamingText) { _, _ in
+            .onChange(of: store.isStreaming) { _, streaming in
+                guard streaming else { return }
+                lastStreamScrollCount = 0
+                DispatchQueue.main.async {
+                    scrollToBottom(proxy, animated: true)
+                }
+            }
+            .onChange(of: store.streamingText) { _, newValue in
                 guard store.isStreaming else { return }
+
+                // Scrolling on every token forces extra layout passes. Batching
+                // it by a few words keeps the stream pinned to the bottom while
+                // cutting the work roughly in half.
+                let delta = newValue.count - lastStreamScrollCount
+                guard delta >= 24 || delta < 0 else { return }
+                lastStreamScrollCount = newValue.count
                 scrollToBottom(proxy, animated: false)
             }
             .onChange(of: store.errorText) { _, newValue in
@@ -253,8 +271,7 @@ struct ChatView: View {
     private var composerArea: some View {
         VStack(spacing: 0) {
             ComposerView(
-                text: $store.draft,
-                image: $pendingImage,
+                resetToken: composerResetToken,
                 isStreaming: store.isStreaming,
                 model: selectedModel,
                 speech: speech,
@@ -289,14 +306,14 @@ struct ChatView: View {
 
     // MARK: - Actions
 
-    private func sendDraft() {
+    private func sendDraft(_ text: String, _ image: UIImage?) {
         guard settings.hasAPIKey else {
             onOpenSettings()
             return
         }
 
-        let trimmed = store.draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let imageData = pendingImage?.ozoJPEGData()
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let imageData = image?.ozoJPEGData(maxDimension: 1200, quality: 0.68)
         guard !trimmed.isEmpty || imageData != nil else { return }
 
         speech.stop()
@@ -313,10 +330,6 @@ struct ChatView: View {
         let systemPrompt = settings.systemPrompt
         let temperature = settings.temperature
 
-        withAnimation(.easeOut(duration: 0.2)) {
-            pendingImage = nil
-        }
-
         store.send(
             text: trimmed,
             imageData: imageData,
@@ -325,6 +338,8 @@ struct ChatView: View {
             systemPrompt: systemPrompt,
             temperature: temperature
         )
+
+        composerResetToken = UUID()
     }
 
     private func sendSuggestion(_ prompt: String) {
@@ -333,10 +348,7 @@ struct ChatView: View {
             return
         }
         speech.stop()
-        withAnimation(.easeOut(duration: 0.18)) {
-            pendingImage = nil
-        }
-        store.draft = ""
+        composerResetToken = UUID()
         store.send(
             text: prompt,
             imageData: nil,
@@ -362,8 +374,8 @@ struct ChatView: View {
     private func startNewChat() {
         Haptics.tap(settings.hapticsEnabled)
         speech.stop()
+        composerResetToken = UUID()
         withAnimation(.easeOut(duration: 0.2)) {
-            pendingImage = nil
             store.newChat()
         }
     }

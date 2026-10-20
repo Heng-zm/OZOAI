@@ -93,6 +93,9 @@ struct RootView: View {
                 speech.stop()
                 settings.savePreferences()
             }
+            if phase == .background {
+                store.flushPersistence()
+            }
         }
     }
 

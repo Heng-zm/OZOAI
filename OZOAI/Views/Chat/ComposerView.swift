@@ -4,19 +4,23 @@ import SwiftUI
 import UIKit
 
 struct ComposerView: View {
-    @Binding var text: String
-    @Binding var image: UIImage?
+    /// Changing this token clears the composer. Keeping the draft and photo
+    /// local to the composer avoids re-rendering the entire chat on each key.
+    let resetToken: UUID
     let isStreaming: Bool
     let model: AIModel
     @ObservedObject var speech: SpeechRecognizer
-    let onSend: () -> Void
+    let onSend: (String, UIImage?) -> Void
     let onStop: () -> Void
     let onSwitchToVision: () -> Void
 
     @EnvironmentObject private var settings: AppSettings
     @FocusState private var isFocused: Bool
 
+    @State private var text = ""
+    @State private var image: UIImage?
     @State private var photoItem: PhotosPickerItem?
+    @State private var photoLoadID = UUID()
     @State private var showSpeechAlert = false
     @State private var speechPrefix = ""
 
@@ -42,6 +46,9 @@ struct ComposerView: View {
                 .font(.system(size: 9.5, weight: .medium))
                 .foregroundStyle(.tertiary)
                 .padding(.bottom, 2)
+        }
+        .onChange(of: resetToken) { _, _ in
+            resetComposer()
         }
         .onChange(of: photoItem) { _, newItem in
             loadPhoto(newItem)
@@ -140,7 +147,7 @@ struct ComposerView: View {
                 Button {
                     guard canSend else { return }
                     Haptics.tap(settings.hapticsEnabled)
-                    onSend()
+                    onSend(text, image)
                 } label: {
                     ZStack {
                         Circle()
@@ -294,16 +301,46 @@ struct ComposerView: View {
             .background(Circle().fill(Color.primary.opacity(0.055)))
     }
 
+    private func resetComposer() {
+        photoLoadID = UUID()
+        photoItem = nil
+        speechPrefix = ""
+
+        if speech.isRecording {
+            speech.stop()
+        }
+        if !text.isEmpty {
+            text = ""
+        }
+        if image != nil {
+            withAnimation(.easeOut(duration: 0.18)) {
+                image = nil
+            }
+        }
+    }
+
     private func loadPhoto(_ item: PhotosPickerItem?) {
         guard let item else { return }
 
+        let loadID = UUID()
+        photoLoadID = loadID
+
         Task { @MainActor in
-            defer { photoItem = nil }
+            defer {
+                if photoLoadID == loadID {
+                    photoItem = nil
+                }
+            }
+
             guard let data = try? await item.loadTransferable(type: Data.self),
-                  let raw = UIImage(data: data) else {
+                  let raw = UIImage(data: data),
+                  photoLoadID == loadID else {
                 return
             }
-            let resized = raw.ozoResized(maxDimension: 1400)
+
+            // Vision requests downscale to 1200 px, so avoid keeping a larger
+            // decoded photo in memory (and in the saved conversation).
+            let resized = raw.ozoResized(maxDimension: 1200)
             withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
                 image = resized
             }

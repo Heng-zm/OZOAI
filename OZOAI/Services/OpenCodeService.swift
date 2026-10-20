@@ -161,6 +161,8 @@ final class OpenCodeClient {
                         )
                     }
 
+                    let decoder = JSONDecoder()
+
                     for try await line in bytes.lines {
                         if Task.isCancelled { break }
 
@@ -173,7 +175,7 @@ final class OpenCodeClient {
                         if payload == "[DONE]" { break }
 
                         guard let data = payload.data(using: .utf8),
-                              let envelope = try? JSONDecoder().decode(StreamEnvelope.self, from: data),
+                              let envelope = try? decoder.decode(StreamEnvelope.self, from: data),
                               let choice = envelope.choices.first else {
                             continue
                         }

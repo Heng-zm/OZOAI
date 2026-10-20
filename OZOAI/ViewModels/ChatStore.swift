@@ -6,17 +6,26 @@ import UIKit
 final class ChatStore: ObservableObject {
     @Published private(set) var conversations: [Conversation]
     @Published var currentID: UUID?
-    @Published var draft: String = ""
     @Published private(set) var streamingText: String = ""
     @Published private(set) var isStreaming: Bool = false
     @Published var errorText: String?
 
     private let storage = ConversationStorage()
+    private let persistenceQueue = DispatchQueue(label: "com.ozoai.persistence", qos: .utility)
+    private var pendingSave: DispatchWorkItem?
     private let client = OpenCodeClient.shared
     private var streamTask: Task<Void, Never>?
     private var streamToken = UUID()
     private var activeConversationID: UUID?
     private var activeModelName: String?
+    private var exportCache: (
+        id: UUID,
+        updatedAt: Date,
+        title: String,
+        modelID: String,
+        messageCount: Int,
+        text: String
+    )?
 
     init() {
         var archive = storage.load()
@@ -69,6 +78,17 @@ final class ChatStore: ObservableObject {
             return "OZO AI — a chat with ten free AI models."
         }
 
+        // The share link lives in the header, which can be rebuilt while a
+        // response streams. Reuse the last export unless the chat changed.
+        if let cached = exportCache,
+           cached.id == conversation.id,
+           cached.updatedAt == conversation.updatedAt,
+           cached.title == conversation.title,
+           cached.modelID == conversation.modelID,
+           cached.messageCount == conversation.messages.count {
+            return cached.text
+        }
+
         var lines: [String] = [
             conversation.title,
             "Model: \(AIModel.model(for: conversation.modelID).name)",
@@ -82,14 +102,22 @@ final class ChatStore: ObservableObject {
         }
 
         lines.append("— Shared from OZO AI")
-        return lines.joined(separator: "\n")
+        let text = lines.joined(separator: "\n")
+        exportCache = (
+            id: conversation.id,
+            updatedAt: conversation.updatedAt,
+            title: conversation.title,
+            modelID: conversation.modelID,
+            messageCount: conversation.messages.count,
+            text: text
+        )
+        return text
     }
 
     // MARK: - Conversations
 
     func newChat() {
         stop()
-        draft = ""
         errorText = nil
         currentID = nil
         persist()
@@ -99,7 +127,6 @@ final class ChatStore: ObservableObject {
         if currentID == conversation.id { return }
         stop()
         currentID = conversation.id
-        draft = ""
         errorText = nil
         persist()
     }
@@ -130,8 +157,20 @@ final class ChatStore: ObservableObject {
         conversations = []
         currentID = nil
         errorText = nil
-        draft = ""
-        storage.clear()
+        clearPersistence()
+    }
+
+    /// Writes the latest snapshot immediately. Call this when the app is about
+    /// to be suspended so the debounced save can't be lost.
+    func flushPersistence() {
+        pendingSave?.cancel()
+        pendingSave = nil
+
+        let archive = ConversationArchive(conversations: conversations, currentID: currentID)
+        let storage = self.storage
+        persistenceQueue.sync {
+            storage.save(archive)
+        }
     }
 
     func clearCurrentMessages() {
@@ -190,7 +229,6 @@ final class ChatStore: ObservableObject {
 
         upsert(conversation)
         currentID = conversation.id
-        draft = ""
         persist()
 
         beginStreaming(
@@ -282,7 +320,7 @@ final class ChatStore: ObservableObject {
                     pending += piece
 
                     let now = Date()
-                    if now.timeIntervalSince(lastFlush) >= 0.03 {
+                    if now.timeIntervalSince(lastFlush) >= 0.05 {
                         accumulated += pending
                         pending = ""
                         lastFlush = now
@@ -424,7 +462,26 @@ final class ChatStore: ObservableObject {
 
     private func persist() {
         let archive = ConversationArchive(conversations: conversations, currentID: currentID)
-        storage.save(archive)
+        let storage = self.storage
+
+        // Coalesce bursts of changes and keep JSON encoding/disk I/O off the
+        // main thread. The serial queue preserves write ordering.
+        pendingSave?.cancel()
+        let work = DispatchWorkItem {
+            storage.save(archive)
+        }
+        pendingSave = work
+        persistenceQueue.asyncAfter(deadline: .now() + 0.35, execute: work)
+    }
+
+    private func clearPersistence() {
+        pendingSave?.cancel()
+        pendingSave = nil
+
+        let storage = self.storage
+        persistenceQueue.async {
+            storage.clear()
+        }
     }
 
     // MARK: - Helpers
@@ -457,8 +514,7 @@ final class ChatStore: ObservableObject {
         for message in conversation.messages.suffix(24) {
             if let data = message.imageData {
                 if supportsVision,
-                   let image = UIImage(data: data),
-                   let jpeg = image.ozoJPEGData(maxDimension: 1200, quality: 0.7) {
+                   let jpeg = Self.jpegDataForUpload(data) {
                     let dataURL = "data:image/jpeg;base64,\(jpeg.base64EncodedString())"
                     let text = message.text.isEmpty ? "Please analyze this image." : message.text
                     wire.append(
@@ -496,6 +552,20 @@ final class ChatStore: ObservableObject {
         }
 
         return wire
+    }
+
+    /// Attachments are already stored as compact JPEGs. Reuse those bytes
+    /// instead of decoding and re-encoding every photo on each request.
+    private static func jpegDataForUpload(_ data: Data) -> Data? {
+        if data.count > 2,
+           data[data.startIndex] == 0xFF,
+           data[data.startIndex + 1] == 0xD8,
+           data[data.startIndex + 2] == 0xFF {
+            return data
+        }
+
+        guard let image = UIImage(data: data) else { return nil }
+        return image.ozoJPEGData(maxDimension: 1200, quality: 0.7)
     }
 
     private static func friendlyMessage(for error: Error) -> String {

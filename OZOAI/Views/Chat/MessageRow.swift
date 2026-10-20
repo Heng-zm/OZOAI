@@ -1,13 +1,17 @@
 import SwiftUI
 import UIKit
 
-struct MessageRow: View {
+struct MessageRow: View, Equatable {
     let message: ChatMessage
     let isLastAssistant: Bool
     let onRegenerate: () -> Void
 
     @EnvironmentObject private var settings: AppSettings
     @State private var copied = false
+
+    static func == (lhs: MessageRow, rhs: MessageRow) -> Bool {
+        lhs.message == rhs.message && lhs.isLastAssistant == rhs.isLastAssistant
+    }
 
     var body: some View {
         if message.role == .user {
@@ -24,16 +28,8 @@ struct MessageRow: View {
             Spacer(minLength: 48)
 
             VStack(alignment: .trailing, spacing: 7) {
-                if let data = message.imageData, let image = UIImage(data: data) {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxWidth: 240, maxHeight: 280)
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-                        )
+                if let data = message.imageData {
+                    MessageImage(data: data)
                 }
 
                 if !message.text.isEmpty {
@@ -109,6 +105,42 @@ struct MessageRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Decodes an attachment once per row instead of on every parent re-render.
+private struct MessageImage: View {
+    let data: Data
+    @State private var image: UIImage?
+
+    init(data: Data) {
+        self.data = data
+        _image = State(initialValue: nil)
+    }
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 240, maxHeight: 280)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+                    )
+            } else {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.primary.opacity(0.06))
+                    .frame(width: 180, height: 140)
+            }
+        }
+        .onAppear {
+            if image == nil {
+                image = UIImage(data: data)
+            }
+        }
     }
 }
 
